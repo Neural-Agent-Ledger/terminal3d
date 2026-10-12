@@ -1,0 +1,136 @@
+# terminal3d example level — levels/11-cold-storage.lvl
+#
+# "Cold Storage" — a second readability-first chamber, inverted temperature
+# from levels/10 to prove the skinning approach generalizes:
+#   walls   : cool cyan circuit  (cold hue, structured traces)
+#   floor   : warm amber grain   (opposite hue → strong wall/floor separation)
+#   ceiling : dark slate sky      (darkest — "up" reads instantly)
+# Cross-temperature walls↔floor gives a large Oklab boundary jump.
+#
+# Puzzle (real, solvable, with choice): three inputs X,Y,Z feed a hidden node H
+# with threshold 2 — ANY two of the three switches solve it. H feeds output O.
+# More interesting than levels/10's strict AND: the player has options.
+#
+# Prove it:
+#   cargo run -p re_imgqa -- levels/11-cold-storage.lvl
+#   cargo run -p re_imgqa --release -- levels/11-cold-storage.lvl
+
+[meta]
+name        = 11-cold-storage
+title       = Cold Storage
+version     = 1
+
+[room]
+size        = 16 10 5
+ambient     = solid
+
+# Cool cyan circuit wall — cold hue, structured trace seams (clean vertical edges,
+# calm interior).
+[material cold_wall]
+fg          = #48C4D0
+bg          = #04100F
+recipe      = circuit scale=1.6 trace_w=0.12
+surface     = wall_solid
+
+# Warm amber grain floor — the opposite hue to the walls, so the wall/floor seam
+# scores a large boundary contrast.
+[material cold_floor]
+fg          = #C89858
+bg          = #181206
+recipe      = grain scale=3.0 speck=0.15
+surface     = floor
+
+# Dark slate sky ceiling — darkest surface, "up" reads at a glance.
+[material cold_ceiling]
+fg          = #38424E
+bg          = #04060A
+recipe      = sky scale=6.0 density=0.06
+surface     = ceiling
+
+[palette]
+fog_color   = #0C0E12
+fog_near    = 3.0
+fog_far     = 20.0
+
+# ── Puzzle graph: 3 inputs → hidden H (threshold 2) → output O ───────────────
+[node X]
+pos          = 2,2,2
+glyph        = X
+color        = #FF6040
+is_input     = yes
+
+[node Y]
+pos          = 2,5,2
+glyph        = Y
+color        = #40FF80
+is_input     = yes
+
+[node Z]
+pos          = 2,8,2
+glyph        = Z
+color        = #40A0FF
+is_input     = yes
+
+[node H]
+pos          = 8,5,2
+glyph        = H
+color        = #C0C0C0
+threshold    = 2
+
+[node O]
+pos          = 13,5,2
+glyph        = O
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+[pipe X->H]
+state        = OFF
+path         = (2,2,2) (8,2,2) (8,5,2)
+switch_at    = (5,2,2)
+density      = 0.7
+
+[pipe Y->H]
+state        = OFF
+path         = (2,5,2) (8,5,2)
+switch_at    = (5,5,2)
+density      = 0.7
+
+[pipe Z->H]
+state        = OFF
+path         = (2,8,2) (8,8,2) (8,5,2)
+switch_at    = (5,8,2)
+density      = 0.7
+
+[pipe H->O]
+state        = OFF
+path         = (8,5,2) (13,5,2)
+switch_at    = (11,5,2)
+density      = 0.7
+
+[inputs]
+X            = 1
+Y            = 1
+Z            = 1
+
+[part beacon]
+size         = 1 1 2
+mask         =
+#
+
+#
+color        = #FFFFFF
+
+[emit O=1]
+parts        = beacon
+
+[pedestal]
+center       = 11 5 1
+volume       = 1 1 1
+
+[door]
+pos          = 15 5 1
+
+[player]
+spawn        = 12 5 1
+facing       = -x

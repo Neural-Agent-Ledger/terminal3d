@@ -1,0 +1,46 @@
+# clippy.toml — workspace-global clippy configuration.
+# Applied by `cargo clippy --workspace` to ALL crates in the workspace.
+#
+# IMPORTANT — re_present is the intended terminal consumer:
+# The `disallowed-types` list below flags crossterm and ratatui types as
+# disallowed. This is designed to catch accidental terminal deps creeping into
+# engine crates. However, clippy.toml is workspace-global and cannot be
+# scoped per-crate. The dep-graph boundary is the authoritative enforcement
+# mechanism (re_present is the ONLY crate that lists crossterm/ratatui as a
+# dependency in its Cargo.toml — all other crates simply don't have those
+# deps). The `disallowed-types` entries below serve as a secondary signal:
+# if a type from these crates somehow becomes accessible in another crate
+# (e.g. via re-export through a common dep), clippy will flag it. False
+# positives in re_present itself are expected and acceptable — they are
+# the intentional use site.
+#
+# See: docs/LAYERING.md — only re_present may touch the terminal.
+
+disallowed-types = [
+    # crossterm types — confined to re_present only
+    "crossterm::terminal::EnterAlternateScreen",
+    "crossterm::terminal::LeaveAlternateScreen",
+    "crossterm::terminal::enable_raw_mode",
+    "crossterm::terminal::disable_raw_mode",
+    "crossterm::event::EventStream",
+    "crossterm::event::Event",
+    "crossterm::event::KeyEvent",
+    "crossterm::event::MouseEvent",
+    "crossterm::style::SetForegroundColor",
+    "crossterm::style::SetBackgroundColor",
+    # ratatui types — confined to re_present only
+    "ratatui::Terminal",
+    "ratatui::Frame",
+    "ratatui::buffer::Buffer",
+    "ratatui::widgets::Widget",
+]
+
+# Lint configuration
+too-many-arguments-threshold = 8
+too-many-lines-threshold = 200
+cognitive-complexity-threshold = 30
+
+# Allow items that conflict with Bevy's conventional APIs (systems take many
+# params, Queries are verbose, event writers/readers need explicit lifetimes).
+# These are tuning knobs, not suppressions — keep them honest.
+avoid-breaking-exported-api = true

@@ -1,0 +1,175 @@
+# terminal3d example level — levels/100-signage-showcase.lvl
+#
+# SIGNAGE SHOWCASE — a demo corridor for three opt-in wall-text upgrades: a
+# state-swapped stencil, authored LOD tiers, and a pixel-font banner. NOT a
+# shipped puzzle (a trivial one-input->one-output graph so it loads + is
+# nominally solvable); its reason to exist is to be WALKED DOWN and LOOKED at.
+#
+# Layout (y = north->south): the BANNER sits at the far NORTH wall (y=0); the
+# LOD-tier stencil is a short walk north of spawn (y=5); the switch/state-stencil
+# puzzle cluster is SOUTH of spawn (y=13-17, i.e. BEHIND the player on arrival).
+# The puzzle cluster sits behind spawn deliberately: ahead of spawn its
+# `CellKind::Object` props (switch/pedestal/source/sink) would sit almost
+# dead-centre of the spawn->banner sight line, and a known off-slice
+# prop-rendering limitation (`re_render::offslice`) turns them into a
+# screen-filling blob that occludes the banner entirely from spawn. That is a
+# pre-existing renderer limitation, not something this level is scoped to fix
+# — so the level is laid out to not stare straight through it instead.
+#
+# What is on show:
+#   * STATE-SWAPPED STENCIL — a `[note stencil bind=…]` placard on the west wall
+#     next to a real switch, SOUTH of spawn. Its body is a different ASCII
+#     placard depending on the bound puzzle node's live state (`--- 0 ---` /
+#     `--- 1 ---`), sampled every frame via `re_render::state_bus`. Toggle the
+#     switch, walk back, and the SIGN changes — not just the pipe glow.
+#   * AUTHORED LOD TIERS — an unbound stencil on the east wall, NORTH of spawn
+#     between it and the banner. Its FULL body is legible up close; `--- far ---`
+#     is a compact one-liner shown once the wall face projects to <= 8 screen
+#     rows; `--- glyph ---` is a single character shown once it projects to
+#     <= 2 rows (`re_render::stencil_variants::select_tier`). Also demonstrates
+#     the glyph->colour key (`colors = …`).
+#   * PIXEL-FONT BANNER — a `[note banner]` at the FAR (north) wall, rendered
+#     through our own 3x5 bitmap font (`re_render::banner`), scale FIT to the
+#     panel automatically (`banner::effective_scale`) and framed, with a
+#     compact-text / single-accent-mark fallback once the face is too small to
+#     show the pixel-font raster at 1:1 (`scene_text::select_banner_tier`).
+#
+#     Spawn sits close enough to the banner (~10 cells) that the COMPACT
+#     bracketed-text tier ("[EXIT]") is plainly legible at spawn and at
+#     mid-corridor (~6 cells) — the measured face is too small at those ranges
+#     for the pixel-font raster to clear at 1:1, so the renderer correctly steps
+#     down a tier rather than showing noise. Walking in close (~2 cells) grows
+#     the face enough for the FULL pixel-font tier to clear and shows a large,
+#     unmistakably blocky "EXIT".
+#
+# Render it:
+#   cargo run -p re_imgqa -- levels/100-signage-showcase.lvl
+
+[meta]
+name        = 100-signage-showcase
+title       = Signage Showcase
+
+[room]
+size        = 9 22 5
+ambient     = solid
+
+[material corridor_stone]
+preset      = stone
+surface     = wall_solid
+
+[material corridor_floor]
+preset      = metal
+surface     = floor
+
+[material corridor_ceiling]
+preset      = stone
+surface     = ceiling
+
+# ───────────────────────── ITEM 1: STATE-SWAPPED STENCIL ────────────────────
+# A minimal switch graph so the demo is a real, loadable, nominally solvable
+# level. `source` (declared FIRST -> state-bus tag 0) is always-on via
+# [inputs]; `sink` (declared SECOND -> tag 1) only powers up while the pipe's
+# `switch_at` cell has been toggled ON. The stencil below binds tag 1, so it
+# reads the SINK's node state (`POWERED=0` lit / `DEAD=1` unpowered), not a raw
+# on/off flag.
+# Nodes/switch sit on the EYE LAYER (z=1, matching `[player] spawn`'s z and the
+# pedestal below) — not one plane up. Off the eye layer, a puzzle-node prop is
+# rendered through `re_render::offslice`'s vertical pass rather than the primary
+# slice; for a demo whose whole point is a clean close-up look at the switch and
+# its stencil, the primary slice's own path is simply the more sensible one to
+# show. The whole cluster is SOUTH of spawn (y > 10) — see this file's header
+# note on why.
+[node source]
+pos          = 2,17,1
+glyph        = A
+is_input     = yes
+
+[node sink]
+pos          = 2,15,1
+glyph        = O
+is_output    = yes
+threshold    = 1
+
+[pipe source->sink]
+state        = OFF
+path         = (2,17,1) (2,15,1)
+switch_at    = (2,16,1)
+density      = 0.8
+
+[inputs]
+source       = 1
+
+[pedestal]
+center       = 2 15 1
+volume       = 1 1 1
+
+[door]
+pos          = 2 13 1
+target_parts = sink
+
+# The state-swapped placard itself, on the WEST wall (x=0, facing +x into the
+# corridor) right beside the switch. `bind = 1` reads the SINK's state-bus tag;
+# `--- 0 ---` is POWERED (lit, node_state 0), `--- 1 ---` is DEAD (unpowered,
+# node_state 1) — the fallback-to-last-group rule means an unreachable DECOY/WON
+# value would show the OFFLINE body too, which is fine for a two-state switch.
+# `colors =` keys the `*` glyph to the register's accent ink.
+[note stencil pos=0,16,2 facing=+x]
+    bind = 1
+    colors = *:#40ff80
+    --- 0 ---
+    +------------+
+    | * STATUS * |
+    |   ONLINE   |
+    +------------+
+    --- 1 ---
+    +------------+
+    | * STATUS * |
+    |  OFFLINE   |
+    +------------+
+
+# ───────────────────────── ITEM 3: AUTHORED LOD TIERS ───────────────────────
+# An UNBOUND stencil (no `bind =`, so it always shows the same story) on the
+# EAST wall (x=8, facing -x), NORTH of spawn — the first thing seen walking
+# toward the banner. Its FULL body is legible up close; `--- far ---` is a
+# compact one-liner shown once the wall face projects to <= 8 screen rows;
+# `--- glyph M ---` is a single character shown once it projects to <= 2 rows.
+# `colors =` demonstrates the glyph->colour key on the frame corners.
+[note stencil pos=8,5,2 facing=-x]
+    colors = +:#e0a040
+    +----------------+
+    +  MAINTENANCE   +
+    +  ACCESS ONLY   +
+    +----------------+
+    --- far ---
+    [ACCESS]
+    --- glyph M ---
+
+# ───────────────────────── ITEM 6: PIXEL-FONT BANNER ────────────────────────
+# At the FAR (north) end of the corridor, `pos` on the y=0 wall, `facing=+y`
+# (into the room, matching every other min-boundary note in the corpus). "EXIT"
+# rasterised through `re_render::banner`'s own 3x5 font, scale auto-FIT to the
+# panel's column budget (`banner::effective_scale` — no `scale =` authored here
+# on purpose, so a future font/budget tune stays correct without touching
+# content), framed. Legible from spawn (~10 cells south, CLEAR sight line — see
+# header) via the FULL pixel-font tier; the COMPACT/ACCENT tiers
+# (`scene_text::select_banner_tier`) are what a player would see if this
+# corridor were longer than a one-world-cell sign can ever project across.
+[note banner pos=4,0,2 facing=+y]
+    word = EXIT
+    frame = on
+
+# ───────────────────────────── ATMOSPHERE ────────────────────────────────────
+# A modest cool fog so distance still reads, pushed back enough that the far
+# banner is not fogged into mush at the spawn end (this level's whole point is
+# long-range legibility).
+[palette]
+fog_color   = #0A1420
+fog_near    = 6.0
+fog_far     = 20.0
+
+# Spawn sits BETWEEN the LOD stencil/banner (ahead, north, y < 10) and the
+# switch cluster (behind, south, y > 10) — a clear, unobstructed sight line to
+# the banner (see header note).
+[player]
+spawn        = 4 10 1
+facing       = -y

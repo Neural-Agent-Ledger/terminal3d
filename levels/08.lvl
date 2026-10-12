@@ -1,0 +1,212 @@
+# terminal3d example level — levels/08.lvl
+#
+# L8 · "Dead Zones" — the cold room. A cat-classifier whose obvious path runs
+# through a DEAD neuron (catastrophic forgetting): face_07 has threshold 99 and
+# can never fire — its two inputs sum to at most 2. The lesson is mercy: do NOT
+# waste toggles trying to light the dead unit. ROUTE AROUND it.
+#
+# Network:
+#   ear, eye, whisker  (inputs, all = 1)
+#       ear  -> face_07 (DEAD, T=99)   \
+#       eye  -> face_07 (DEAD, T=99)    >  the obvious path, through the scar
+#       face_07 -> output               /   (face_07 never fires => useless)
+#
+#       ear  -> cat (T=2)              \
+#       whisker -> cat (T=2)            >  the route-around (cat fires: 1+1>=2)
+#       cat -> output                   /
+#
+# Door target: output (T=1).
+# Solution (3 toggles): ear->cat ON, whisker->cat ON, cat->output ON.
+#   Leave every face_07 pipe OFF — the dead unit can never reach threshold.
+#
+# Dead-node trick is pure data: T=99 > max incoming sum (2). No engine feature.
+
+[meta]
+name        = level-08-dead-zones
+title       = Dead Zones
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 18 14 5
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# A cold storage layer: thin frost-snow drifts over a near-black steel-blue fog.
+# The room reads dim and refrigerated — a place where warm things were left to
+# go cold.
+[effects]
+snow        = 0.2
+matrix      = 0.08
+
+[palette]
+fog_color   = #060a12
+fog_near    = 2.0
+fog_far     = 16.0
+
+# COLOR-FORWARD palette: three element hues over a cold steel-blue body.
+#   walls  — cold cyan ink on deep blue-black (the refrigerated shell)
+#   floor  — slightly warmer steel so the ground reads distinct from the walls
+#   trace  — live signal lines glow a brighter ice-cyan (the working circuit)
+[material shell]
+preset   = ice
+fg       = #5FC8E0
+bg       = #060c16
+surface  = wall_solid
+
+[material deck]
+preset   = metal
+fg       = #6E7C8C
+bg       = #0a1018
+surface  = floor
+
+[material live_trace]
+preset   = monitor
+fg       = #8FF0FF
+bg       = #07121c
+surface  = wall_trace
+
+[note researcher pos=9,6,2 facing=-x]
+    Field note: don't waste toggles trying to light a dead unit. If the
+    obvious path runs through one, route around it instead.
+
+[note system_log pos=6,3,2 facing=-x]
+    > hidden_unit face_07: state=dead (catastrophic forgetting).
+    > max reachable activation: 2 (threshold 99 — can never fire).
+
+# --- inputs: the three sensory channels (cool, near-cyan family) ---
+[node ear]
+pos          = 2,2,2
+glyph        = E
+pool         = EAR TUFT PRICK POINT LISTEN
+pool_alt     = ухо 耳 oreja oreille Ohr 귀
+color        = #7FE0FF
+is_input     = yes
+
+[node eye]
+pos          = 2,6,2
+glyph        = Y
+pool         = EYE PUPIL SLIT GLEAM GAZE
+pool_alt     = глаз 目 ojo œil Auge 눈
+color        = #9CE8FF
+is_input     = yes
+
+[node whisker]
+pos          = 2,10,2
+glyph        = W
+pool         = WHISKER FEELER BRISTLE SENSE THREAD
+pool_alt     = ус 髭 bigote moustache 수염
+color        = #B8F0FF
+is_input     = yes
+
+# --- the DEAD node: threshold 99, can never fire (max incoming sum = 2) ---
+[node face_07]
+pos          = 9,3,2
+glyph        = X
+pool         = FACE NAME WHO COLD GONE KEPT
+pool_alt     = twarz 顔 imię 名前 lico なまえ
+color        = #2A3340
+threshold    = 99
+
+# --- the LIVE hidden node: threshold 2, the route-around ---
+[node cat]
+pos          = 9,9,2
+glyph        = C
+pool         = CAT CREATURE WARM ALIVE PURR FUR
+pool_alt     = кот 猫 gato chat Katze 고양이
+color        = #FFD27A
+threshold    = 2
+
+[node output]
+pos          = 15,6,2
+glyph        = O
+pool         = OUTPUT MODEL PASS
+pool_alt     = выход モデル salida
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+# === the obvious (DEAD) path: feeds face_07, which can never fire ===
+[pipe ear->face_07]
+state        = OFF
+path         = (2,2,2) (9,2,2) (9,3,2)
+switch_at    = (5,2,2)
+density      = 0.6
+color        = #3A4656
+
+[pipe eye->face_07]
+state        = OFF
+path         = (2,6,2) (2,3,2) (9,3,2)
+switch_at    = (5,3,2)
+density      = 0.6
+color        = #3A4656
+
+[pipe face_07->output]
+state        = OFF
+path         = (9,3,2) (15,3,2) (15,6,2)
+switch_at    = (12,3,2)
+density      = 0.6
+color        = #3A4656
+
+# === the route-around (LIVE) path: cat fires on ear + whisker ===
+[pipe ear->cat]
+state        = OFF
+path         = (2,2,2) (2,2,3) (9,2,3) (9,9,3) (9,9,2)
+switch_at    = (5,2,3)
+density      = 0.7
+color        = #FFD27A
+
+[pipe whisker->cat]
+state        = OFF
+path         = (2,10,2) (9,10,2) (9,9,2)
+switch_at    = (5,10,2)
+density      = 0.7
+color        = #B8F0FF
+
+[pipe cat->output]
+state        = OFF
+path         = (9,9,2) (15,9,2) (15,6,2)
+switch_at    = (12,9,2)
+density      = 0.7
+color        = #FFD27A
+
+[part cat_glyph]
+size         = 3 3 1
+mask         =
+#.#
+.#.
+###
+color        = #FFD27A
+offset       = 0 0 1
+
+[part cat_base]
+size         = 3 3 1
+mask         =
+###
+.#.
+.#.
+color        = #8FF0FF
+offset       = 0 0 0
+
+[emit output=1]
+parts        = cat_glyph cat_base
+
+[inputs]
+ear          = 1
+eye          = 1
+whisker      = 1
+
+[pedestal]
+center       = 12 6 1
+volume       = 3 3 2
+
+[door]
+pos          = 17 6 1
+target_parts = output
+
+[player]
+# Spawn just WEST of the door, looking WEST (-x) down the pedestal/output run so
+# the cat-block target and its feed-switches lie dead ahead; the door sits behind.
+spawn        = 16 6 1
+facing       = -x

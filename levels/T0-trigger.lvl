@@ -1,0 +1,107 @@
+# terminal3d example level — levels/T0-trigger.lvl
+#
+# T0 · "Trip-Field" — TRIGGER-FIELDS demo (триггер поля на произвольные события).
+#
+# A box REGION on the floor fires an ACTION when the player walks INTO it. This
+# tiny level proves the trigger-fields loop end to end:
+#
+#   [trigger] region=(...) action=activate gate once=true
+#
+# Walking into the region drives the input node `gate` to 1 (the ActivateNode
+# action), which lights the output through a permanently-ON pipe and opens the
+# door. The trigger fires ONCE (`once = true`) on the OUTSIDE→INSIDE edge —
+# standing still inside never re-fires, and after a level reset it re-arms.
+#
+# Network:
+#   gate (IN, trigger-driven) ──ON──> output (T=1)
+#
+# Runtime feature exercised: `[trigger]` (re_level) + the per-frame entry-detect
+# firing system (`re_runtime::triggers::apply_triggers`) + `ActivateNode`
+# driving `re_puzzle::set_input_value`. The smallest level that proves a trigger
+# field activates a node by walking into a region.
+#
+# (`[inputs] gate = 1` is the STATIC authored start so the lvlcheck brute-force
+# can prove the level winnable; at runtime `gate` starts at 0 and the trigger is
+# what raises it — exactly the L5 floor-zone pattern.)
+
+[meta]
+name        = T0-trigger
+title       = Trip-Field
+version     = 1
+spec_rev    = 2026-06-20
+
+[room]
+size        = 16 8 4
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+[palette]
+fog_color   = #08100A
+fog_near    = 3.0
+fog_far     = 16.0
+
+# --- the SCENE output, far -x end, on the centreline ---
+[node output]
+pos          = 2,4,1
+glyph        = O
+pool         = OPEN PASSED ENTERED CROSSED
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+# --- `gate`: the trigger-driven input. No switch on its line — the trigger field
+#     is the only thing that raises it. ---
+[node gate]
+pos          = 11,4,1
+glyph        = G
+pool         = STEP CROSS ENTER TRIP
+color        = #58D0FF
+is_input     = yes
+
+# === gate -> output : permanently ON. Whatever `gate` holds reaches the output. ===
+[pipe gate->output]
+state        = ON
+path         = (11,4,1) (2,4,1)
+density      = 0.8
+color        = #58D0FF
+
+[part scene_glyph]
+size         = 3 3 1
+mask         =
+.#.
+###
+.#.
+color        = #58D0FF
+offset       = 0 0 1
+
+[emit output=1]
+parts        = scene_glyph
+
+# THE TRIGGER FIELD: a 3x3 patch of floor in front of the +x mouth. Walking into
+# it (at the standing layer z=1) fires `activate gate` ONCE — gate -> 1 -> output
+# lights -> the door opens.
+[trigger trip]
+region       = (10,3,1)-(12,5,1)
+action       = activate gate
+once         = true
+
+# Authored start: gate HIGH so lvlcheck's static brute-force proves winnability.
+# At runtime gate starts 0; the player spawns OFF the trigger and must walk into
+# it to raise it.
+[inputs]
+gate         = 1
+
+[pedestal]
+center       = 4 4 1
+volume       = 3 3 2
+
+[door]
+pos          = 1 4 1
+target_parts = output
+
+[player]
+# Spawn at the +x mouth on the centreline (y=4), looking -x toward the network.
+# The trigger patch is just ahead at x=10..12 — the player walks straight into it.
+spawn        = 14 4 1
+facing       = -x

@@ -1,0 +1,73 @@
+# terminal3d example level — levels/EM-curl.lvl
+#
+# PARTICLE-EMITTER SHOWCASE (curl-noise motion) — NOT a campaign puzzle. One
+# emitter, `motion = curl`, isolated so a rendered
+# frame shows ONLY the new behaviour: a divergence-free 2D curl-noise field
+# drifts the smoke column left/right/left as it rises, instead of a straight
+# ballistic line. Deterministic (same seed -> same wander every run).
+
+[meta]
+name        = EM-curl
+title       = Curl Smoke
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ── CURL SMOKE — motion = curl (W1) ───────────────────────────────────────────
+# `scale` is the noise field's wavelength in world cells, `strength` its drift
+# speed, `evolve` how fast the field itself churns over time. Layered ON TOP of
+# the ordinary buoyant accel, so the column still rises overall while wandering.
+[emitter curl_smoke]
+origin_world    = 5.0 5.0 0.6
+colors          = 0xD8E8F0 0x90A8B8 0x384850
+color_mode      = RampOverAge
+family          = haze_dot
+bold            = Off
+motion          = curl scale=0.7 strength=1.1 evolve=0.2
+rate            = 18.0
+lifetime        = 4.0
+lifetime_spread = 0.6
+accel           = 0.0 0.0 0.15
+max_particles   = 220
+seed            = 9001
+blend           = KeepBg

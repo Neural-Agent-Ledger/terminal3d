@@ -1,0 +1,84 @@
+# terminal3d example level — levels/SKY-stars.lvl
+#
+# Starfield Vault — demo level for the procedural sky program's "stars"
+# family. Open-top vault: the ceiling is a VOID material, so every upward ray
+# escapes into the sky sampler instead of hitting a solid roof — the whole
+# point of this fixture is to SEE the sky, not the room.
+#
+# STARFIELD — grid-placed stars with milky-way band, twinkle, and time-sliced
+# meteor streaks. All-preset defaults (kind=stars).
+# QUICK RENDER
+#   cargo run -p re_imgqa -- levels/SKY-stars.lvl
+#
+# TURNING: A/D orbits the camera through the full 360°/full-dome sky.
+
+[meta]
+name        = SKY-stars
+title       = Starfield Vault
+
+# Modest open vault: 40×40 footprint, 16 cells tall — plenty of open-top sky,
+# small enough that a --dump fixture stays cheap.
+[room]
+size        = 40 40 16
+ambient     = solid
+
+[sky]
+kind        = stars
+
+# VOID CEILING: rays angling upward pass straight through to the sky sampler.
+[material open_sky]
+preset      = void
+surface     = ceiling
+
+# Dim, low-contrast floor so the eye is drawn upward to the sky, matching the
+# CYBER-sky.lvl reference template's framing.
+[material deck_floor]
+fg          = #14161C
+bg          = #05060A
+recipe      = grain scale=3.0 speck=0.15 tile_eps=0.08
+surface     = floor
+
+[material far_wall]
+fg          = #14161C
+bg          = #0A0C12
+recipe      = grain scale=2.0 speck=0.06 tile_eps=0.04
+surface     = wall_solid
+
+[palette]
+fog_color   = #05060A
+fog_near    = 10.0
+fog_far     = 30.0
+
+# ── MINIMAL PUZZLE — one input, one output, fully winnable ───────────────────
+[node source]
+pos         = 22 36 2
+glyph       = ◉
+is_input    = yes
+
+[node sink]
+pos         = 24 36 2
+glyph       = O
+is_output   = yes
+threshold   = 1
+
+[pipe source->sink]
+state       = OFF
+path        = (22,36,2) (24,36,2)
+switch_at   = (23,36,2)
+density     = 0.8
+
+[inputs]
+source      = 1
+
+[pedestal]
+center      = 24 36 1
+volume      = 1 1 1
+
+[door]
+pos         = 24 37 1
+target_parts = sink
+
+# Centre of the room, south wall, facing north into open sky.
+[player]
+spawn       = 20 34 2
+facing      = -y

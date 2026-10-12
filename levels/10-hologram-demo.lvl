@@ -1,0 +1,49 @@
+# terminal3d example level — levels/10-hologram-demo.lvl
+#
+# Hologram-pipeline fixture (NOT a shipped puzzle). Proves the glyph-only
+# transparent HOLOGRAM material end-to-end: an authored [material] bound to the
+# wall_solid surface renders as fg-coloured horizontal scanline glyphs on a
+# near-black VOID bg (no filled wall colour), scrolling vertically over time.
+#
+# A long room so the FAR wall sits past FAR_FREEZE_DIST (= 32 cells) and renders
+# fully quiet (the far-freeze proof) while the near wall stays a live, scrolling
+# hologram.
+
+[meta]
+name        = 10-hologram-demo
+title       = Hologram Demo
+
+[room]
+size        = 8 8 4
+ambient     = solid
+
+[material holo_wall]
+fg          = #58F0FF
+bg          = #020608
+recipe      = hologram line_freq=8.0 scan_w=0.45
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 5,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (5,2,2)
+
+[pedestal]
+center       = 5 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 7 4 1
+
+[player]
+spawn        = 4 6 1
+facing       = -y

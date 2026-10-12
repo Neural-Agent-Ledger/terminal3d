@@ -1,0 +1,97 @@
+# terminal3d example level — levels/A1-zone-materials.lvl
+#
+# Scalable Material Overlay · Phase P1 — "Zones by id (MVP)" demo.
+#
+# THE PROOF: two `floor` cells read DIFFERENTLY. The whole floor is bound to the
+# `floor_base` material (cool steel grain). A single `[zone]` covers a square in
+# the middle of the floor and binds the distinct `floor_tile` material (hot amber
+# tiling) — so the zone region of the floor shades from its OWN material instead
+# of the surface-kind default, while the rest of the floor stays `floor_base`.
+#
+# Mechanism (P1, DP1-A/DP3-A): the zone resolves its material NAME → the same
+# 1-based colour palette `[color_cell_ids]` uses; `build_map` stamps that id into
+# the SOLID floor cells inside the zone's box; the renderer reads `side_data` and
+# dispatches the per-cell colour material. No analytic, no lines, no scale rules.
+#
+# Not a shipped puzzle — a render-demo fixture (like 94/95/97). A trivial single
+# ON pipe keeps it structurally valid for lvlcheck. Render it with:
+#   cargo run -p re_imgqa -- levels/A1-zone-materials.lvl
+
+[meta]
+name        = level-A1-zone-materials
+title       = Zone Materials
+
+[room]
+size        = 12 12 5
+ambient     = solid
+
+# The base floor — cool steel-blue grain. Every floor cell starts here.
+[material floor_base]
+fg          = #6FA6CE
+bg          = #08111E
+recipe      = grain scale=3.0 speck=0.15
+surface     = floor
+
+# The zone floor — hot amber tiling. Bound ONLY inside the [zone] region below,
+# so its part of the floor reads distinctly from `floor_base`. This is a normal
+# authored material; the zone binds it BY NAME (it is NOT a surface = … binding).
+[material floor_tile]
+fg          = #E8B14A
+bg          = #1E1405
+recipe      = brick aspect=1.0 mortar_w=0.16 grain=0.20
+
+# A neutral wall so the room reads cleanly around the floor contrast.
+[material room_wall]
+fg          = #9AA4B0
+bg          = #0B0E12
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.25
+surface     = wall_solid
+
+# ── THE OVERLAY ZONE (Scalable Material Overlay §6 P1) ───────────────────────
+# Covers a 4×4 square in the middle of the floor (z = 0). Binds `floor_tile` by
+# name → resolves to the shared 1-based palette id → stamped into those floor
+# cells' side_data. scale = none (P1: no scale behaviour; flat octave-0).
+[zone center_tile]
+region      = (4,4,0)-(7,7,0)
+material    = floor_tile
+scale       = none
+
+[node a]
+pos         = 2 6 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 9 6 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,6,2) (9,6,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 9 6 1
+volume      = 1 1 1
+
+[door]
+pos         = 11 6 1
+target_parts = b
+
+[player]
+spawn       = 5 6 1
+facing      = +x

@@ -1,0 +1,31 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+# `xtask` is repository-local tooling, not a library or a shipped binary — it is
+# never a dependency of anything under `engine/`, `editor/` or `apps/`, and
+# nothing here depends on them either (that asymmetry is itself part of what
+# `cargo xtask layers` checks: xtask may depend on external crates only).
+# Declared directly here rather than through `[workspace.dependencies]`, so
+# this crate's own manifest is the complete record of what it needs.
+[dependencies]
+# Typed, versioned wrapper over `cargo metadata --format-version 1`'s JSON —
+# the resolved dependency graph (which optional deps are actually enabled,
+# per `dep_kinds`), not just the raw manifest lists. Chosen over hand-rolled
+# `serde_json` parsing (as `no_net_in_game_build.rs` does) because this crate
+# has no other reason to touch JSON directly.
+cargo_metadata = "0.23"
+# `cargo_metadata::Metadata::workspace_root` / `Package::manifest_path` are
+# UTF-8 paths from this crate; declared directly (rather than relying on a
+# re-export) so the pinned version is explicit in this manifest.
+camino = "1"
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"

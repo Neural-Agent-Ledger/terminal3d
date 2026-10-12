@@ -1,0 +1,164 @@
+# terminal3d example level — levels/07.lvl
+#
+# L7 · "Garden" — three growth neurons (water, light, seed) feed a growth
+# detector (threshold 3: a bloom only opens when all three conditions are
+# tended at once). One decoy pipe runs the seed off into a "dormant" detector
+# that targets nothing — a seed left in the dark just sleeps.
+#
+# Network:
+#   water, light, seed  (inputs, all = 1)
+#       → growth (threshold 3)  → bloom (output)
+#   seed → dormant (decoy, not a door target)
+#
+# Win toggle: water->growth ON, light->growth ON, seed->growth ON,
+#             growth->bloom ON. The decoy (seed->dormant) is irrelevant.
+
+[meta]
+name        = level-07-garden
+title       = Garden
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 18 14 5
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# A warm green grow-room: steam off the watered pipes hangs in a low, mossy
+# fog. Everything here wants to grow toward the light.
+[effects]
+steam       = on
+matrix      = 0.15
+
+[palette]
+fog_color   = #10180c
+fog_near    = 2.5
+fog_far     = 15.0
+
+[note researcher pos=9,6,2 facing=-x]
+    Trial log: water, light, seed — supply all three and growth blooms the
+    same day, every time. Withhold any one and it just waits, dormant,
+    until the missing input returns.
+
+[node water]
+pos          = 2,2,2
+glyph        = W
+pool         = WATER RAIN DEW SAP DROPLET STREAM IRRIGATE MONSOON THIRST-END
+pool_alt     = вода 水 ماء eau Wasser 물 agua
+color        = #6FD0FF
+is_input     = yes
+
+[node light]
+pos          = 2,6,2
+glyph        = L
+pool         = LIGHT SUN PHOTON DAYLIGHT WARMTH GLOW NOON RADIANCE
+pool_alt     = свет 光 ضوء lumière Licht 빛 luz
+color        = #FFE680
+is_input     = yes
+
+[node seed]
+pos          = 2,10,2
+glyph        = S
+pool         = SEED SPORE KERNEL GERM ACORN PIP SPROUT-WAIT EMBRYO
+pool_alt     = семя 種 بذرة graine Samen 씨앗 semilla
+color        = #C8A878
+is_input     = yes
+
+[node growth]
+pos          = 9,6,2
+glyph        = G
+pool         = GROWTH GREEN VINE STEM TENDRIL UNFURL REACH FLOURISH LEAF
+pool_alt     = рост 成長 نمو croissance Wachstum 성장 brote
+color        = #6FE08A
+threshold    = 3
+
+[node dormant]
+pos          = 6,12,2
+glyph        = X
+pool         = DORMANT SLEEP WAIT FALLOW FROST-LOCK BURIED STILL
+pool_alt     = покой 休眠 سكون dormance Ruhe 휴면 latente
+color        = #4a5238
+threshold    = 1
+
+[node bloom]
+pos          = 15,6,2
+glyph        = B
+pool         = BLOOM FLOWER PETAL BLOSSOM OPEN ROSE LILY CROWN OUTPUT
+pool_alt     = цветок 花 زهرة fleur Blüte 꽃 flor
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+[pipe water->growth]
+state        = OFF
+path         = (2,2,2) (9,2,2) (9,6,2)
+switch_at    = (5,2,2)
+density      = 0.7
+color        = #6FD0FF
+
+[pipe light->growth]
+state        = OFF
+path         = (2,6,2) (9,6,2)
+switch_at    = (5,6,2)
+density      = 0.7
+color        = #FFE680
+
+[pipe seed->growth]
+state        = OFF
+path         = (2,10,2) (2,10,3) (9,10,3) (9,6,3) (9,6,2)
+switch_at    = (5,10,3)
+density      = 0.7
+color        = #C8A878
+
+[pipe seed->dormant]
+state        = OFF
+path         = (2,10,2) (2,12,2) (6,12,2)
+switch_at    = (4,12,2)
+density      = 0.6
+color        = #4a5238
+
+[pipe growth->bloom]
+state        = OFF
+path         = (9,6,2) (15,6,2)
+switch_at    = (12,6,2)
+density      = 0.7
+color        = #6FE08A
+
+[part flower_head]
+size         = 3 3 1
+mask         =
+.#.
+###
+.#.
+color        = #FF8AD0
+offset       = 0 0 1
+
+[part flower_stem]
+size         = 3 3 1
+mask         =
+.#.
+.#.
+.#.
+color        = #6FE08A
+offset       = 0 0 0
+
+[emit bloom=1]
+parts        = flower_head flower_stem
+
+[inputs]
+water        = 1
+light        = 1
+seed         = 1
+
+[pedestal]
+center       = 12 6 1
+volume       = 3 3 2
+
+[door]
+pos          = 17 6 1
+target_parts = bloom
+
+[player]
+spawn        = 13 6 1
+facing       = -x

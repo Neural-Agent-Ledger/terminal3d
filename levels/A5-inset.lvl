@@ -1,0 +1,103 @@
+# terminal3d example level — levels/A5-inset.lvl
+#
+# Scalable Material Overlay · Phase P4 — INSETS ("врезки"), bounded phase-band reveal.
+#
+# THE PROOF: a self_similar `[zone]` skins the north wall with the infinite-zoom
+# fractal field (P3). An authored `[inset]` references a CHILD scene
+# (`A5-child.lvl`) over a SUB-REGION (centre columns) of that wall. During the
+# inset's PHASE-BAND of the seamless per-octave zoom LOOP, the child's representative
+# colour (warm amber) OVERRIDES the fractal field inside the inset region — then the
+# loop carries the phase out of band and the inset fades, reappearing once per loop.
+#
+# WHY a phase-band, not an octave number: the infinite-zoom field is PERIODIC over
+# one octave (LN2 in log-radius) — that periodicity IS the seamless loop, so there is
+# no distinguishable "current octave" to key off. The inset reveals during a
+# phase-band `[lo, hi)` of the reduced zoom phase. `at_octave = 0` maps to the band
+# `[0, 0.2·LN2)`, which CONTAINS the static-dump phase (t=0 ⇒ reduced phase 0), so the
+# `--dump` shows the amber reveal directly. In-game it pulses once per loop.
+#
+# NOTE (2.5D raycaster): a wall hit's cell is `(map_x, map_y, cam_z_plane)` — the
+# vertical extent of a wall is `wall_v`, NOT a distinct cell_z. So inset region
+# membership is per (x, y) on the CAMERA'S z-plane (z=1 here). The region selects the
+# centre COLUMNS x=4..7 of the north wall (full-height).
+#
+# Layout: a SHALLOW room so the player stands a few cells south of the north wall
+# looking NORTH (-y) — the zone-skinned wall (with its centred amber inset) fills the
+# view dead ahead.
+#
+# Render it (in-band reveal at t=0):
+#   cargo run -p re_imgqa -- levels/A5-inset.lvl
+
+[meta]
+name        = level-A5-inset
+title       = Inset Phase-Band Reveal
+
+[room]
+size        = 12 7 10
+ambient     = solid
+
+# The plain wall the self-similar zone reads against (the ambient perimeter).
+[material hall_stone]
+fg          = #8C96A2
+bg          = #0B0E12
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.25
+surface     = wall_solid
+
+# The ZONE material — a COOL portal base. The inset's amber reads sharply against
+# this cyan when it reveals.
+[material portal_wall]
+fg          = #4ED0E8
+bg          = #06141C
+recipe      = brick aspect=1.0 mortar_w=0.16 grain=0.20
+
+# ── THE OVERLAY ZONE (P3 SelfSimilar) — the full north wall (y=0). ───────────
+[zone north_portal]
+region      = (1,0,1)-(10,0,8)
+material    = portal_wall
+scale       = self_similar arms:5 twist:0.9 warp:0.3
+insets      = warp_window
+
+# ── THE INSET (P4) — the centre columns of the north wall reveal the child. ──
+[inset warp_window]
+at_octave   = 0
+region      = (4,0,1)-(7,0,1)
+child       = A5-child.lvl
+
+# ───────────────────────────── MINIMAL PUZZLE (sandbox) ─────────────────────
+[node source]
+pos          = 3,5,2
+glyph        = A
+is_input     = yes
+
+[node sink]
+pos          = 8,5,2
+glyph        = O
+is_output    = yes
+threshold    = 1
+
+[pipe source->sink]
+state        = OFF
+path         = (3,5,2) (8,5,2)
+switch_at    = (5,5,2)
+
+[inputs]
+source       = 1
+
+[pedestal]
+center       = 8 5 1
+volume       = 1 1 1
+
+[door]
+pos          = 8 6 1
+target_parts = sink
+
+# Stand a few cells south of the north wall, looking NORTH (-y): the self-similar
+# portal zone (with its centred amber inset) fills the wall dead ahead.
+[player]
+spawn        = 6 5 1
+facing       = -y
+
+[palette]
+fog_color   = #06121C
+fog_near    = 4.0
+fog_far     = 14.0

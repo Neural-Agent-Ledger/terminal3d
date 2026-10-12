@@ -1,0 +1,37 @@
+[package]
+name = "re_level"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+re_world = { workspace = true }
+# R2 pipe-cell tagging: the shared `side_data` pipe-tag namespace contract
+# (`encode_pipe_side_data`) lives in `re_core` so `re_level` (stamper),
+# `re_render` (reader), and `re_game` (bridge) all reference one source of truth.
+re_core = { workspace = true }
+# `[emitter]` sections author a `re_world::EmitterSpec`, whose `origin`/`direction`/
+# `accel` fields are `glam::Vec3`. We need the constructor; `glam` is already a
+# pinned workspace dependency (re_world uses it), so this only opts `re_level` in —
+# no new version enters `Cargo.lock`.
+glam = { workspace = true }
+# `[vox NAME]` sections stamp a `.vox` model into a level. We read the model's
+# solid voxels via the SAME `dot_vox` loader the importer uses (no `.vox` parsing
+# is reimplemented). The dep is already declared in the workspace; this only opts
+# `re_level` into it (root Cargo.toml unchanged). A level with no `[vox]` section
+# never touches it.
+dot_vox = { workspace = true }
+# `[texture NAME]` sections decode a PNG / WebP / GIF (first frame) into a
+# `re_core::TextureImage` (RGBA8) so a real image can surface a wall. Pure decode,
+# no terminal/GPU (engine-agnostic: a buffer transform, not rendering). 0.25.x is
+# already in `Cargo.lock` (transitively via arboard), so these reviewed feature
+# additions introduce no new crate version. webp/gif are features of the same
+# already-pinned `image` 0.25 dep — no version bump, no new dependency. A level
+# with no `[texture]` section never decodes anything.
+image = { version = "0.25", default-features = false, features = ["png", "webp", "gif"] }
+
+[dev-dependencies]
+# (tests load real files from repo-root levels/)

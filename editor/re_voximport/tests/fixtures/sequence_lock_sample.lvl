@@ -1,0 +1,115 @@
+# re_voximport crate-local fixture — NOT shipped content.
+#
+# A neutral (no story text) clone of the `[sequence]` + `power_budget` graph
+# shape used by the game's campaign "sequence-lock" mechanic: three seq-inputs
+# feed a small switchable net whose 3-bit output window is observed in order.
+# Node names and coordinates are copied from the shape verbatim so the puzzle
+# numbers (three ordered patterns, stateless minimum 4, budget 4) match the
+# real mechanic exactly; only the naming is neutral — an engine feature test
+# is pointed at this crate-local fixture instead of a campaign level in the
+# separate game repository. Used here for the `[sequence]` round-trip writer
+# test.
+
+[meta]
+name        = sequence-lock-budget-fixture
+title       = Sequence Lock Budget Fixture
+
+[room]
+size         = 20 16 4
+power_budget = 4
+
+[node in1]
+pos          = 2,4,2
+is_input     = yes
+
+[node in2]
+pos          = 2,8,2
+is_input     = yes
+
+[node in3]
+pos          = 2,12,2
+is_input     = yes
+
+[node gate]
+pos          = 8,10,2
+threshold    = 2
+
+[node out1]
+pos          = 15,4,2
+is_output    = yes
+threshold    = 1
+
+[node out2]
+pos          = 15,8,2
+is_output    = yes
+threshold    = 2
+
+[node out3]
+pos          = 15,12,2
+is_output    = yes
+threshold    = 2
+
+[inputs]
+in1          = 1
+in2          = 1
+in3          = 1
+
+# A: in1 -> out1 (BREAK bit)
+[pipe in1->out1]
+state        = OFF
+path         = (2,4,2) (15,4,2)
+switch_at    = (6,4,2)
+
+# B: in1 -> gate (bridges around the y=8 run)
+[pipe in1->gate]
+state        = OFF
+path         = (2,4,2) (4,4,2) (4,10,2) (8,10,2)
+switch_at    = (4,6,2)
+
+# C: in2 -> gate
+[pipe in2->gate]
+state        = OFF
+path         = (2,8,2) (2,10,2) (8,10,2)
+switch_at    = (5,10,2)
+
+# D: in2 -> out2 (FALL bit direct feed)
+[pipe in2->out2]
+state        = OFF
+path         = (2,8,2) (15,8,2)
+switch_at    = (7,8,2)
+
+# E: gate -> out2 (FALL bit second feed)
+[pipe gate->out2]
+state        = OFF
+path         = (8,10,2) (8,9,2) (15,9,2) (15,8,2)
+switch_at    = (12,9,2)
+
+# F: gate -> out3 (DARK bit first feed)
+[pipe gate->out3]
+state        = OFF
+path         = (8,10,2) (8,11,2) (15,11,2) (15,12,2)
+switch_at    = (12,11,2)
+
+# G: in3 -> out3 (DARK bit direct feed)
+[pipe in3->out3]
+state        = OFF
+path         = (2,12,2) (15,12,2)
+switch_at    = (6,12,2)
+
+[sequence]
+observe      = out1 out2 out3
+step         = out1
+step         = out2
+step         = out3
+
+[pedestal]
+center       = 14 6 1
+volume       = 1 3 2
+
+[door]
+pos          = 0 8 1
+target_parts = out3
+
+[player]
+spawn        = 18 8 1
+facing       = -x

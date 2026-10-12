@@ -1,0 +1,182 @@
+# terminal3d example level — levels/UL-demo.lvl
+#
+# THREE-CHANNEL DEMO: foreground colour / background colour / coloured underline,
+# side by side in one frame, so the user can confirm all three SGR channels render.
+#
+# Camera spawns at (5,3,1) facing +x.  Layout (same structure as U1-underline.lvl):
+#
+#   CHANNEL A — FOREGROUND colour:
+#     wall_solid ('#') = explicit cyan fg (#00FFEE) on near-black bg.  The fg hue is
+#     the only distinguishing feature.  No emissive, no underline.
+#     Appears as: perimeter walls (y=0,y=6,x=0) + a pillar at (x=6,y=2).
+#
+#   CHANNEL B — BACKGROUND colour:
+#     wall_trace ('/') = `stone` preset (warm earthy grey fg, distinctly dark brown
+#     bg).  No emissive, no underline.  The bg colour is the sole distinguishing
+#     feature.  Appears as the far wall at x=8 for rows y=1,3,5.
+#
+#   CHANNEL C — UNDERLINE (the channel under test):
+#     wall_matrix ('%') = `lava` preset: emissive 0.75 (> STYLE_GLOW_EMISSIVE 0.18),
+#     AccentGate::Inked, UnderlineStyle::Curly, HUE_FROM_FG.  BOTH paths fire:
+#       • Emissive under-glow → SGR `58;2;r;g;b` on EVERY cell (including blanks).
+#       • Accent layer (Curly / Inked) → SGR `4:3` + `58;2;r;g;b` on inked cells.
+#     The lava pillar at (x=6,y=4) is ONE CELL ahead of the camera and brightly
+#     headlamp-lit, making the underline channel unmistakable at close range.
+#
+#   FLOOR: `gold` preset — LitRidge gate, Dotted style, fixed amber #FFE08A.
+#   On lit floor cells near the camera the gold underline fires as a 4th variant.
+#
+# Verify (the `--ansi` dump emits underline as `58;2;r;g;b`):
+#   cargo run -p re_imgqa -- levels/UL-demo.lvl
+# Expected: 700+ lines each containing `58;2;r;g;b` (the underline colour SGR).
+# Each carries `4:1` (single underline shape) and `58;2;r;g;b` (the lava under-glow
+# colour). This confirms the coloured-underline channel is populated and emitted.
+
+[meta]
+name        = UL-demo
+title       = Three-Channel Demo
+
+[room]
+size        = 9 7 4
+ambient     = solid
+
+# ── Channel A: FOREGROUND colour ───────────────────────────────────────────────
+# wall_solid ('#') with explicit bright cyan fg. No emissive, no underline.
+# fg hue = #00FFEE; bg = #020808 (near-black). FG contrast is the only channel.
+[material fg_wall]
+fg          = #00FFEE
+bg          = #020808
+glyph       = #
+recipe      = grain scale=2.0 speck=0.3 tile_eps=0.05
+surface     = wall_solid
+
+# ── Channel B: BACKGROUND colour ───────────────────────────────────────────────
+# wall_trace ('/') = stone preset. Warm grey fg over a dark earthy bg.
+# No emissive, no underline. BG colour is the sole distinguishing feature.
+[material bg_wall]
+preset      = stone
+surface     = wall_trace
+
+# ── Channel C: UNDERLINE colour (SGR 58;2;r;g;b) ──────────────────────────────
+# wall_matrix ('%') = lava preset.
+#   emissive: 0.75 (>= STYLE_GLOW_EMISSIVE 0.18) → emissive under-glow fires on
+#     every cell (including blank) → SGR 58;2;r;g;b (brightened-fg underline color).
+#   underline_accent: Curly / AccentGate::Inked / HUE_FROM_FG → SGR 4:3 + 58;2;
+#     on every inked (non-space) cell.
+#   The lava pillar at (x=6, y=4) is ONE cell ahead of the camera and brightly
+#   headlamp-lit — the closest, brightest cell in the frame → 58;2; is prominent.
+[material ul_wall]
+preset      = lava
+surface     = wall_matrix
+
+# ── Floor: GOLD (dotted amber underline on lit ridges) ─────────────────────────
+# LitRidge gate, Dotted style, fixed hue #FFE08A.
+# On well-lit floor cells near the camera this fires a second underline variant.
+[material ground]
+preset      = gold
+surface     = floor
+
+# Ceiling = void: dark backdrop, no underline.
+[material roof]
+preset      = void
+surface     = ceiling
+
+# ── Geometry ───────────────────────────────────────────────────────────────────
+# Grid: rows = y (top=y=0, bottom=y=6), columns = x (left=x=0, right=x=8).
+# This layout is deliberately modelled on the proven U1-underline.lvl structure
+# (same room size, same spawn, same pillar at x=6 one cell ahead of the camera).
+#
+# '#' = wall_solid  (fg_wall: FOREGROUND cyan)
+# '/' = wall_trace  (bg_wall: BACKGROUND stone)  — far wall at x=8 + row guard
+# '%' = wall_matrix (ul_wall: UNDERLINE lava)    — near pillar x=6 + far wall x=8
+# '_' = floor (gold: dotted amber underline on lit ridges)
+# '^' = ceiling (void: dark, no underline)
+#
+# Camera at (5,3,1) facing +x sees:
+#   • '%' lava pillar at (6,4,z) — 1 cell right-ahead, brightly lit → 58;2; clear
+#   • '#' cyan pillar at (6,2,z) — 1 cell left-ahead               → FG cyan
+#   • '/' stone far wall at x=8 across several rays               → BG stone
+#   All three channels are visible in a single frame.
+[cells]
+size        = 9 7 4
+
+# z=0 — floor (gold: dotted amber underline on lit ridges)
+_________
+_________
+_________
+_________
+_________
+_________
+_________
+
+# z=1 — eye level
+#########
+#......./
+#.....#./
+#......./
+#.....%./
+#......./
+#########
+
+# z=2 — same walls, full height
+#########
+#......./
+#.....#./
+#......./
+#.....%./
+#......./
+#########
+
+# z=3 — ceiling (void: dark, no underline)
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+
+# ── Minimal loadable puzzle ────────────────────────────────────────────────────
+[node a]
+pos         = 2 1 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 2 5 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,1,2) (2,5,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 2 5 1
+volume      = 1 1 1
+
+[door]
+pos         = 1 1 1
+target_parts = b
+
+# ── Player spawn ───────────────────────────────────────────────────────────────
+# (5,3,1) facing +x — identical to U1-underline.lvl's proven spawn.
+# Lava '%' pillar at (6,4) is 1 cell ahead and brightly headlamp-lit:
+# emissive ≥ STYLE_GLOW_EMISSIVE fires the 58;2; underline colour.
+[player]
+spawn       = 5 3 1
+facing      = +x

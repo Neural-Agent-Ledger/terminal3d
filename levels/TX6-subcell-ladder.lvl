@@ -1,0 +1,124 @@
+# terminal3d example level — levels/TX6-subcell-ladder.lvl
+#
+# THE SUB-CELL BLITTING LADDER, three rungs side by side (render fixture, NOT a puzzle).
+#
+# WHY THIS EXISTS
+#   TX5-genplate compares off / quad / braille from half a cell away, so each pane
+#   fills the screen and only its texel DENSITY is legible. This level compares the
+#   two rungs TX5 cannot show — HALF (2x1) and SEXTANT (3x2) — against QUAD (2x2),
+#   from ELEVEN cells back, so all three plates are on screen at once at the same
+#   apparent size. Same generated plate, same span, same height: any difference
+#   between the three is the sub-cell mode and nothing else.
+#
+# THE LADDER (notcurses' ordering)
+#   Pixel > Sextant (3x2) > Quadrant (2x2) > Half (2x1) > ASCII. More sub-texels is
+#   more detail, but every rung stays BLOCK geometry, so each cell keeps TWO colours —
+#   which is the whole reason the ladder is blocks and not Braille (2x4 sub-texels but
+#   ONE ink colour for all eight dots).
+#
+#   HALF is not merely "the cheap rung". A terminal cell is about 1:2, so ONE
+#   horizontal split is what makes a sub-texel SQUARE. Half-blocks are the rung whose
+#   pixels are not distorted, which is why the image-to-terminal tools that care about
+#   fidelity (chafa's default, timg, viu) reach for it before the denser rungs.
+#
+#   SEXTANT costs a font carrying U+1FB00..U+1FB3B (Symbols for Legacy Computing).
+#   There is no portable way to ask a terminal whether it has them — and NOT ONE font
+#   shipped with a stock Windows 11 install does — so the mode is OPT-IN behind
+#   `TS_SEXTANT=1`; without it `subcell = sextant` DEGRADES to quad rather than
+#   painting a wall of tofu. Dump this level both ways and the centre plate is the
+#   only thing that changes.
+#
+# LAYOUT — three plates on one line, three and a half cells ahead of the spawn:
+#   LEFT   pane  (wall_trace,  x 1..3 )  — subcell = half     -> 2x1 upper/lower blocks
+#   CENTRE gap   (wall_solid,  x 4..8 )  — subcell = sextant  -> 3x2 sextants (GATED)
+#   RIGHT  pane  (wall_matrix, x 9..11)  — subcell = quad     -> 2x2 quadrant blocks
+# The two panes are one-cell-deep decal slabs at y=8; the centre plate is the room's
+# own far wall at y=11, seen through the gap between them. Surface bindings are GLOBAL
+# per wall kind, so each MODE rides its own surface — three kinds, three rungs.
+#
+# `fit = stretch` and NO `span`: the plate TILES, one figure per wall cell, at the same
+# size on all three surfaces. A `span` would map ONE figure across a whole pane, which
+# shrinks the detail to a thin band and makes the rungs harder — not easier — to tell
+# apart, which is the opposite of what this fixture is for.
+#
+# Dump it both ways and diff:
+#   cargo run -p re_imgqa -- levels/TX6-subcell-ladder.lvl
+
+[meta]
+name        = TX6-subcell-ladder
+title       = Sub-cell Ladder — half / sextant / quad
+
+[room]
+size        = 13 12 5
+ambient     = solid
+
+# The same GENERATED plate TX5 binds — committed source, no third-party art.
+# Regenerate with:
+#   cargo run -p re_voximport --bin gen_texfixture -- assets/texture/genplate_tex.png
+[texture genplate]
+file        = assets/texture/genplate_tex.png
+
+# HALF mode (2x1). Rides wall_trace — the LEFT pane, x 1..3, z 1..3.
+[material img_half]
+recipe      = image
+texture     = genplate
+surface     = wall_trace
+fit         = stretch
+subcell     = half
+
+# SEXTANT mode (3x2). Rides wall_solid — the room's far wall, framed by the gap
+# between the two panes. Degrades to quad without TS_SEXTANT=1.
+[material img_sextant]
+recipe      = image
+texture     = genplate
+surface     = wall_solid
+fit         = stretch
+subcell     = sextant
+
+# QUAD mode (2x2) — the reference rung. Rides wall_matrix, the RIGHT pane,
+# x 9..11. Identical width and fit to the other two.
+[material img_quad]
+recipe      = image
+texture     = genplate
+surface     = wall_matrix
+fit         = stretch
+subcell     = quad
+
+# LEFT pane (HALF): a one-cell-deep WallTrace slab at y=12.
+[wall_decal pane_half]
+surface     = trace
+region      = (1,8,1)-(3,8,3)
+
+# RIGHT pane (QUAD): a one-cell-deep WallMatrix slab at y=12, same size.
+[wall_decal pane_quad]
+surface     = matrix
+region      = (9,8,1)-(11,8,3)
+
+# Minimal puzzle scaffolding so the loader is satisfied (render fixture, not a puzzle).
+# Everything sits at y=1, BEHIND the spawn, so nothing occludes the three plates.
+[node in_a]
+pos          = 1,1,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 11,1,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (1,1,2) (11,1,2)
+
+[pedestal]
+center       = 11 1 1
+volume       = 1 1 1
+
+[door]
+pos          = 12 5 1
+
+# Centred, three and a half cells back from the panes, facing +y — all three plates
+# in frame at a size where the sub-cell texel density is what your eye compares.
+[player]
+spawn        = 6 4 1
+facing       = +y

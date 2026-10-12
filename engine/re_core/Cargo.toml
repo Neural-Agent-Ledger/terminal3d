@@ -1,0 +1,18 @@
+[package]
+name = "re_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Dev-only: derive Reflect on inspectable types so BRP/inspector can read them.
+# bevy_reflect is always transitively present via bevy → bevy_internal.
+# Off in the shipped build — the default build is byte-unchanged.
+reflect = []
+
+[dependencies]
+bevy = { workspace = true }
+glam = { workspace = true }

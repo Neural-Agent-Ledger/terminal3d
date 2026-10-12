@@ -1,0 +1,154 @@
+# terminal3d example level — levels/S1-ramp.lvl
+#
+# S1 · RAMP DEMO (critic S1) — a walkable 45° RampZ slope that RENDERS as a rising
+# wedge, not a full-height wall. NOT a shipped puzzle: a fixture proving the M3b 45°
+# geometry now bounds the wall SLICE to the slope-surface height per column, so the
+# silhouette steps UP the slope (low at the foot, high at the head) and the open air
+# ABOVE the slope is see-through to the back wall behind it.
+#
+# Geometry: a single RampZ(PosX) cell at (6,6) on the eye plane z=1. PosX rises in +X —
+# the FOOT (low) is the cell's west edge, the HEAD (full height) its east edge. The
+# spawn sits SOUTH of the cell (x=6, y=3) facing +y, so the rise axis (X) maps
+# LEFT→RIGHT across the screen: the drawn slice steps UP the slope, reading as a rising
+# WEDGE (low left, high right) instead of a flat wall, with the room seen ABOVE the
+# slope. Walk toward it and the slope visibly rises.
+#
+# Dump it (the ramp reads as a rising wedge, low on the left, high on the right):
+#   cargo run -p re_imgqa -- levels/S1-ramp.lvl
+
+[meta]
+name        = S1-ramp
+title       = Ramp (rising slope) Demo
+
+[room]
+size        = 12 9 5
+ambient     = solid
+
+# Surfaces: plain, legible materials so the SHADING doesn't distract from the GEOMETRY.
+[material walls]
+fg          = #B8C0CC
+bg          = #14181F
+recipe      = brick aspect=2.0 mortar_w=0.16 grain=0.20
+surface     = wall_solid
+
+[material ground]
+preset      = metal
+surface     = floor
+
+[material roof]
+preset      = void
+surface     = ceiling
+
+# ── Geometry: a dense [cells] grid. Per z-layer, y rows top→bottom, blank line
+#    between layers. '#' = solid wall, '.' = empty, '_' = floor, '^' = ceiling.
+#    The ramp cells (x=6, y=3..5, z=1) are solid '#' carrying a `rampz posx` shape.
+[cells]
+size        = 12 9 5
+
+# z=0 — floor slab.
+____________
+____________
+____________
+____________
+____________
+____________
+____________
+____________
+____________
+
+# z=1 — eye / cast plane. Perimeter walls; the ramp RUN sits at y=6 (7th row),
+# x=4..8, rising in +X (foot west, head east). The spawn is SOUTH of the run (y=2)
+# looking +y, so the rise maps left→right across the screen. The ramp cells are '#'
+# here and get the `rampz posx` shapes below. Interior is otherwise open.
+############
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+#.....#....#
+#..........#
+############
+
+# z=2 — full-height perimeter walls only; interior OPEN so the ramp's rising slope
+# (which projects ABOVE the horizon) is seen against the far/back wall, then ceiling.
+############
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+############
+
+# z=3 — same open upper band.
+############
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+#..........#
+############
+
+# z=4 — ceiling slab.
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+^^^^^^^^^^^^
+
+# The ramp: a single RampZ(PosX) cell at (6,6,1), rising +X (foot west, head east).
+# One cell reads as ONE clean rising wedge (a run of adjacent cells would sawtooth,
+# since the 2.5D cast walks a single z-plane — each cell rises 0→1 independently).
+shapes =
+6 6 1 rampz posx
+
+# ── A minimal loadable puzzle so this is a real level, not bare scenery ─────────
+[node a]
+pos         = 2 1 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 2 7 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,1,2) (2,7,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 2 7 1
+volume      = 1 1 1
+
+[door]
+pos         = 1 1 1
+target_parts = b
+
+# Spawn SOUTH of the ramp run on the eye plane, facing +y so the rise axis (X) runs
+# left→right across the screen — the slope reads as a rising wedge (low left, high right).
+[player]
+spawn       = 6 3 1
+facing      = +y

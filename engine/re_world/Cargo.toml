@@ -1,0 +1,22 @@
+[package]
+name = "re_world"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Dev-only: derive Reflect on inspectable types so BRP/inspector can read them.
+# bevy_reflect (with glam impls for Vec3) is always transitively present via
+# bevy → bevy_internal → bevy_math/bevy_reflect. The `reflect` feature just
+# gates the #[derive(Reflect)] + #[reflect(Component)] attributes; no extra dep
+# is needed beyond the already-present `bevy` workspace dep.
+# Off in the shipped build — the default build is byte-unchanged.
+reflect = []
+
+[dependencies]
+bevy = { workspace = true }
+glam = { workspace = true }
+re_core = { workspace = true }

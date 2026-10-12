@@ -1,0 +1,44 @@
+# terminal3d example level — levels/99-flow-demo.lvl
+#
+# R2 reactive-materials DEMO (not a shipped campaign level): a powered pipe whose
+# trace cells flow input->output. `render_pipes = true` opts this level into the
+# visible tagged-WallTrace pipe stamping; the bridge powers pipe 0 (its input node
+# fires by default), so its trace scrolls + reads hot, while it is legible against
+# the walls. Used to eyeball P1 flow via `--dump`.
+
+[meta]
+name        = flow-demo
+title       = Flow Demo
+
+[room]
+size         = 14 8 4
+ambient      = solid
+render_pipes = true
+
+[node A]
+pos          = 2,4,2
+is_input     = 1
+
+[node B]
+pos          = 11,4,2
+is_output    = 1
+
+[inputs]
+A = 1
+
+[pipe A->B]
+state        = ON
+path         = (2,4,2) (11,4,2)
+switch_at    = (6,4,2)
+
+[pedestal]
+center       = 11 4 2
+volume       = 1 1 1
+
+[door]
+pos          = 1 4 1
+target_parts = B
+
+[player]
+spawn        = 7 1 1
+facing       = +y

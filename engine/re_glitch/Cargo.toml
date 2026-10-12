@@ -1,0 +1,24 @@
+[package]
+name = "re_glitch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# `re_glitch` — a deterministic VISUAL GLITCH post-process over the raycaster's
+# Framebuffer. Engine-pure: depends ONLY on re_core (the Framebuffer/Cell types).
+# ZERO terminal / game / bevy_render dependencies — every effect is a pure
+# function of (frame, config, time, seed).
+#
+# It DOES depend on `bevy` (via re_core's `Resource` derive surface) only to
+# expose `GlitchConfig`/`GlitchPlugin` as a Bevy resource + plugin, exactly like
+# `re_render`. The pure core (`apply_glitch`) needs none of that and is what the
+# tests exercise.
+#
+# `glam` was removed 2026-09-28 (dependency-refresh pass) — grep found zero
+# uses; all math here is done through re_core's own types, not glam directly.
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+re_core = { workspace = true }

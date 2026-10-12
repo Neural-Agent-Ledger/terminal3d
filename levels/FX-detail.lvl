@@ -1,0 +1,82 @@
+# terminal3d example level — levels/FX-detail.lvl
+#
+# ENGINE TECH-DEMO (NOT a campaign puzzle) — DETAIL TIERS. A coherent small
+# room whose only job is to exercise the opt-in `[material] detail = on`
+# world-anchored detail-tier cross-fade (tone/pattern/detail) end-to-end, the
+# way 21-emitter-showcase.lvl exercises the emitter control set.
+#
+# `detail = on` parses in `re_level` into `LevelMaterial.detail`, reaches
+# `re_world::MaterialDef::detail`, and `re_render::registry_for_map` carries
+# it onto the resolved `Material`. `Material::sample_grain` gates an EXTRA
+# fine-grain micro-detail texel (glyph `:`) on
+# `re_render::detail_lod::{tier_and_weight, reveal_finer}` whenever `detail`
+# is set — every OTHER material (`detail` unset, the default) is
+# byte-identical to before this field existed.
+#
+# `north_detail_wall` is the ONLY material below with `detail = on`, bound to
+# `wall_solid` and facing the spawn dead-on, so walking straight at it from
+# spawn (y=1) toward the wall (y=9) sweeps the footprint ρ smoothly through
+# the DETAIL band across the whole approach (a room this size never reaches
+# pure TONE/PATTERN under the reference footprint calibration): the
+# micro-detail glyph count rises MONOTONICALLY (and by a wide margin) as
+# distance falls from ~8 to ~1, never popping and never keyed by screen
+# position (world-anchored `reveal_finer`, so it cannot shimmer under a turn).
+#
+# NOTE for level authors: `north_detail_wall` deliberately has NO `glyph =`
+# key. `Material::apply_lighting` gates its whole detail-texel reveal (the
+# ordinary speck/grid AND this material's B39 micro-detail) on
+# `GlyphSource::Recipe` — a material with a hand-authored FIXED glyph reads as
+# itself at every distance by design (a puzzle-element look must not dissolve
+# into grain), which would silently make `detail = on` inert.
+#
+# The puzzle itself is a trivial one-pipe network (so the level loads + is
+# valid); solving it is not the point — the wall is.
+
+[meta]
+name        = FX-detail
+title       = Detail Tiers (B39)
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+# ── The wall under test: `detail = on`, everything else default ──────────────
+[material north_detail_wall]
+fg          = #C8B090
+bg          = #241A10
+recipe      = grain scale=1.6 speck=0.3 tile_eps=0.05
+surface     = wall_solid
+detail      = on
+
+[material floor_grid]
+fg          = #2A6C8C
+bg          = #060E14
+glyph       = .
+recipe      = grain scale=2.0 speck=0.2 tile_eps=0.08
+surface     = floor
+
+# ── The trivial network (keeps the level valid) ───────────────────────────────
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 1 1
+facing       = +y

@@ -1,0 +1,25 @@
+[package]
+name = "re_lvlcheck"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "re_lvlcheck"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lvlcheck"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+re_core = { workspace = true }
+re_level = { workspace = true }
+re_puzzle = { workspace = true }
+re_world = { workspace = true }
+
+[dev-dependencies]
+# (integration tests load real files from repo-root levels/ via re_level)

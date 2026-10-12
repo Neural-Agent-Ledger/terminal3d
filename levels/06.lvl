@@ -1,0 +1,193 @@
+# terminal3d example level — levels/06.lvl
+#
+# L6 · "Polysemantic" — one hidden neuron that means TWO things at once, and
+# BOTH meanings are required. The door wins only when out_face AND out_grid both
+# fire. They share a single source (poly), so you cannot collapse the network to
+# one path — you must keep both. The "don't simplify / keep both" beat, made
+# mechanical.
+#
+# Network:
+#   s1, s2  (inputs, both = 1)
+#       s1 -> poly (T=2)      \  poly fires on 1+1 >= 2
+#       s2 -> poly (T=2)      /
+#       poly -> out_face (T=1)   \  one fired node feeds TWO required outputs
+#       poly -> out_grid (T=1)   /
+#
+# Door targets: BOTH out_face AND out_grid (check_win requires every target).
+# Solution (4 toggles): s1->poly, s2->poly, poly->out_face, poly->out_grid all ON.
+#
+# Runtime support: re_puzzle::check_win requires ALL door_targets to
+# fire; [door] target_parts accepts multiple space-separated node names. A single
+# node CAN feed two outputs (two outgoing pipes). No engine feature needed.
+
+[meta]
+name        = level-06-polysemantic
+title       = Polysemantic
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 16 14 5
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# A two-toned chamber: a faint violet drift over a deep indigo fog. The room
+# itself reads as one space holding two moods — warm above, cold below.
+[effects]
+matrix      = 0.12
+
+[palette]
+fog_color   = #0c0814
+fog_near    = 2.0
+fog_far     = 15.0
+
+# COLOR-FORWARD palette built on ONE polysemantic hue (violet) split into a
+# warm-leaning and a cold-leaning sibling — the look IS the mechanic.
+#   walls  — violet neon on indigo-black (the shared body)
+#   floor  — cool steel-violet so the deck reads under the wiring
+#   trace  — live lines glow brighter orchid (the working circuit)
+[material body]
+preset   = neon
+fg       = #C07AFF
+bg       = #0a0614
+surface  = wall_solid
+
+[material deck]
+preset   = metal
+fg       = #6A6280
+bg       = #0c0a16
+surface  = floor
+
+[material live_trace]
+preset   = neon
+fg       = #E6A0FF
+bg       = #100a1c
+surface  = wall_trace
+
+[note model_thought pos=8,6,2 facing=-x]
+    The lattice on the far wall is a face and it is a grid at the same
+    time — not two things wearing one mask, one thing that is both.
+    Collapsing to only one loses the other.
+
+[note system_log pos=5,3,2 facing=-x]
+    > polysemantic unit poly: superposition stable.
+    > readout requires conjunction: out_face AND out_grid.
+
+# --- inputs ---
+[node s1]
+pos          = 2,3,2
+glyph        = 1
+pool         = SENSE FEED FIRST UPPER WARM-SIDE
+pool_alt     = первый 一 uno premier erste
+color        = #FF80C0
+is_input     = yes
+
+[node s2]
+pos          = 2,9,2
+glyph        = 2
+pool         = SENSE FEED SECOND LOWER COLD-SIDE
+pool_alt     = второй 二 dos second zweite
+color        = #80C0FF
+is_input     = yes
+
+# --- the polysemantic hidden node (means two things) ---
+[node poly]
+pos          = 8,6,2
+glyph        = P
+pool         = POLYSEMANTIC BOTH-AT-ONCE SUPERPOSED KEEP-BOTH UNCOLLAPSED MNEMOS
+pool_alt     = многозначный 兼 ambos deux beides
+color        = #C060FF
+threshold    = 2
+
+# --- the two REQUIRED outputs (face + grid, both must fire) ---
+[node out_face]
+pos          = 13,3,2
+glyph        = F
+pool         = FACE PORTRAIT VISAGE WARM-READ NAMED
+pool_alt     = лицо 顔 rostro visage Gesicht
+color        = #FF8AD0
+is_output    = yes
+threshold    = 1
+
+[node out_grid]
+pos          = 13,9,2
+glyph        = G
+pool         = GRID LATTICE MESH COLD-READ MAPPED
+pool_alt     = решётка 格子 rejilla grille Gitter
+color        = #8AD0FF
+is_output    = yes
+threshold    = 1
+
+# === inputs into the shared node ===
+[pipe s1->poly]
+state        = OFF
+path         = (2,3,2) (8,3,2) (8,6,2)
+switch_at    = (5,3,2)
+density      = 0.7
+color        = #FF80C0
+
+[pipe s2->poly]
+state        = OFF
+path         = (2,9,2) (8,9,2) (8,6,2)
+switch_at    = (5,9,2)
+density      = 0.7
+color        = #80C0FF
+
+# === one node, TWO required outgoing pipes — both must be lit ===
+[pipe poly->out_face]
+state        = OFF
+path         = (8,6,2) (8,3,2) (13,3,2)
+switch_at    = (11,3,2)
+density      = 0.7
+color        = #FF8AD0
+
+[pipe poly->out_grid]
+state        = OFF
+path         = (8,6,2) (8,9,2) (13,9,2)
+switch_at    = (11,9,2)
+density      = 0.7
+color        = #8AD0FF
+
+# === pedestal lights only when BOTH outputs fire (one part per output) ===
+[part face_block]
+size         = 3 3 1
+mask         =
+#.#
+...
+.#.
+color        = #FF8AD0
+offset       = 0 1 1
+
+[part grid_block]
+size         = 3 3 1
+mask         =
+#.#
+.#.
+#.#
+color        = #8AD0FF
+offset       = 0 1 0
+
+[emit out_face=1]
+parts        = face_block
+
+[emit out_grid=1]
+parts        = grid_block
+
+[inputs]
+s1           = 1
+s2           = 1
+
+[pedestal]
+center       = 11 6 1
+volume       = 3 3 2
+
+[door]
+pos          = 15 6 1
+target_parts = out_face out_grid
+
+[player]
+# Spawn just WEST of the door, looking WEST (-x) into the room so the two output
+# blocks (the face and the grid) flank the view dead ahead; the door is behind.
+spawn        = 14 6 1
+facing       = -x

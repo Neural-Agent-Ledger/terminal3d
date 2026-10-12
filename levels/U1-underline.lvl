@@ -1,0 +1,167 @@
+# terminal3d example level — levels/U1-underline.lvl
+#
+# UNDERLINE-COLOR CHANNEL DEMO (playtest #9). NOT a shipped puzzle — a fixture
+# that makes the terminal's COLORED-UNDERLINE channel (re_core CellStyle.underline,
+# SGR `58;2;r;g;b`) unmistakably visible so a player can confirm it renders.
+#
+# WHY YOU COULDN'T SEE IT BEFORE: most shipped materials use UnderlineAccent::NONE,
+# so the underline channel is left at NO_UNDERLINE and the terminal paints no
+# coloured rule under the glyph. Only a handful of materials populate it:
+#   * gold / metal      — a fixed-colour DOTTED underline (LitRidge gate)
+#   * neon / lava / monitor / holo_amber / spark — a CURLY underline whose colour
+#     is a brightened take on the cell's own fg (HUE_FROM_FG), PLUS an emissive
+#     under-glow (their emissive ≥ STYLE_GLOW_EMISSIVE earns the 3rd-channel glow).
+# This room skins every camera-facing surface with those materials, so EVERY lit
+# wall/floor cell carries a distinct, saturated coloured underline.
+#
+# Verify (the `--ansi` dump emits the underline as `58;2;r;g;b`):
+#   cargo run -p re_imgqa -- levels/U1-underline.lvl
+# Every wall/floor cell in the frame should carry a `;58;2;...` colored-underline
+# SGR. The three back-wall bands carry three DIFFERENT underline colours.
+
+[meta]
+name        = U1-underline
+title       = The Underline Channel
+
+[room]
+size        = 9 7 4
+ambient     = solid
+
+# ── Underline-accent materials bound per surface kind ──────────────────────────
+# All three WALL materials use the `Inked` accent gate (fires on EVERY inked cell),
+# each in a DISTINCT hue, so the colored-underline channel is pervasive and three
+# different colours are visible side-by-side. Verified per-material colours (see the
+# re_render `underline_channel_diagnostic` test):
+#   monitor -> #xxFFxx green curly   |  neon -> #FF70FD magenta curly
+#   lava    -> #FFA962 orange curly
+# wall_solid (#) = MONITOR: a CRT-green CURLY undercurl (HUE_FROM_FG) + emissive glow.
+[material band_solid]
+preset      = monitor
+surface     = wall_solid
+
+# wall_trace (/) = NEON: a magenta CURLY undercurl (#FF70FD) + strong emissive glow.
+[material band_trace]
+preset      = neon
+surface     = wall_trace
+
+# wall_matrix (%) = LAVA: a hot-orange CURLY undercurl (#FFA962) + emissive glow.
+[material band_matrix]
+preset      = lava
+surface     = wall_matrix
+
+# floor = GOLD: a fixed amber DOTTED colored underline (#FFE08A) on lit ridges
+#   (LitRidge gate) — a fourth, fixed-colour accent under your feet for contrast.
+[material ground]
+preset      = gold
+surface     = floor
+
+# ceiling = VOID: dark, no underline accent (a calm backdrop so the lit, underlined
+#   walls/floor stand out).
+[material roof]
+preset      = void
+surface     = ceiling
+
+# ── Geometry: a dense [cells] grid (takes precedence over `ambient`). The FAR wall
+#    (x = 8, the column the camera faces) is split into three vertical y-bands:
+#      #### -> gold (dotted amber underline)
+#      //// -> neon (curly magenta underline)
+#      %%%% -> lava (curly orange underline)
+#    so three DISTINCT underline colours sit side-by-side facing the spawn.
+#    Floor = _, ceiling = ^. Perimeter side walls = # (gold). Layout per z-layer,
+#    y rows top→bottom, blank line between layers.
+[cells]
+size        = 9 7 4
+
+# z=0 — floor slab (everything the player walks on; metal = dotted steel underline)
+_________
+_________
+_________
+_________
+_________
+_________
+_________
+
+# z=1 — eye-level walls. The room mixes all three wall KINDS so three DISTINCT
+# underline colours fill the view at once (all Inked-gate → every cell carries one):
+#   '#' walls/pillar -> MONITOR (green curly undercurl)
+#   '/' pillar/far   -> NEON    (magenta curly undercurl)
+#   '%' pillar       -> LAVA    (orange curly undercurl)
+# The far wall (x=8) is neon '/'; a green '#' and orange '%' pillar sit dead ahead
+# of the camera (spawn x=5, facing +x) so green/magenta/orange underlines are all
+# visible head-on at once.
+#########
+#......./
+#.....#./
+#......./
+#.....%./
+#......./
+#########
+
+# z=2 — same pillars + walls full height so the colours fill the view vertically.
+#########
+#......./
+#.....#./
+#......./
+#.....%./
+#......./
+#########
+
+# z=3 — ceiling slab (void = no underline; a calm dark backdrop)
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+^^^^^^^^^
+
+# ── A minimal loadable puzzle so this is a real level, not bare scenery ─────────
+[node a]
+pos         = 2 1 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 2 5 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,1,2) (2,5,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 2 5 1
+volume      = 1 1 1
+
+[door]
+pos         = 1 1 1
+target_parts = b
+
+# Placard explaining the channel, on the wall behind the player.
+[note system_log pos=1,3,2 facing=+x]
+    > render_channel: colored_underline (SGR 58;2;r;g;b) = ONLINE.
+    > every lit surface here carries a coloured UNDERLINE accent — a third colour
+    > channel under the glyph, independent of fg/bg. green walls = monitor,
+    > magenta = neon, orange = lava, amber floor = gold. see the rule? it works.
+
+# Spawn CLOSE to the banded far wall and facing it, so the bands fill the view as
+# large INKED glyphs — close enough that the curly (neon/lava) and dotted (gold)
+# underline SUBSTYLES fire, not just the far emissive-glow single rule.
+[player]
+spawn       = 5 3 1
+facing      = +x

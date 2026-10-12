@@ -1,0 +1,66 @@
+[package]
+name = "re_voximport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "vox2lvl"
+path = "src/main.rs"
+
+[[bin]]
+name = "lvl2vox"
+path = "src/bin/lvl2vox.rs"
+
+# Regenerates `assets/texture/genplate_tex.png`, the free image-sampler test plate
+# bound by `levels/TX5-genplate.lvl`. Committed so that asset is reproducible from
+# source instead of being an opaque blob.
+[[bin]]
+name = "gen_texfixture"
+path = "src/bin/gen_texfixture.rs"
+
+# Import CLI: a foreign image (downloaded
+# texture, photo, normal map) -> resized/converted PNG or GIF + a ready-to-paste
+# `[texture NAME]` block matching `re_level`'s exact `.lvl` grammar (`file`,
+# `max_size`, `height`). Offline tooling only: no terminal, no renderer.
+[[bin]]
+name = "tex_import"
+path = "src/bin/tex_import.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+re_level = { workspace = true }
+re_world = { workspace = true }
+dot_vox = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+# `texfixture` encodes the generated image-sampler test plate as PNG; `tex_import`
+# additionally decodes/encodes GIF (frame-preserving animation import) and decodes
+# WebP (a common download format, always re-encoded to PNG on the way out — see
+# `tex_import`'s doc comment for why we never need to WRITE webp). `image` 0.25 is
+# ALREADY in Cargo.lock at this exact feature set (`re_level` enables
+# png/webp/gif for `[texture]`/`[sky]` decode), so this adds no crate and no new
+# version to the lockfile — it only opts this crate into features already
+# resolved workspace-wide. Pure buffer<->bytes transforms: no terminal, no GPU.
+image = { version = "0.25", default-features = false, features = ["png", "gif", "webp"] }
+
+[dev-dependencies]
+# Integration tests author a real `.vox` byte blob via dot_vox's writer and
+# round-trip it through the shipping `vox_to_level` entry point, then re-parse
+# the emitted `.lvl` and stamp its map.
+dot_vox = { workspace = true }
+re_level = { workspace = true }
+re_world = { workspace = true }
+# The `[sequence]` round-trip test proves L11 STILL SOLVES after a
+# `to_lvl_text` save→reload by building the puzzle from the round-tripped level
+# and driving the lock — a dev-only edge (re_puzzle depends on re_level/re_world,
+# never on re_voximport, so there is no cycle).
+re_puzzle = { workspace = true }
+toml = { workspace = true }
+# The `[light]`/`[atmosphere]` round-trip test builds `re_world::PointLight`
+# fixtures directly (`pos: glam::Vec3`). `glam` is already a pinned workspace
+# dependency (re_world/re_level use it), so this only opts `re_voximport`'s
+# tests into it — no new crate or version enters `Cargo.lock`.
+glam = { workspace = true }

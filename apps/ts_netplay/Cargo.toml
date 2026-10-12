@@ -1,0 +1,44 @@
+[package]
+name = "ts_netplay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# ts_netplay is the runnable multiplayer testbed binary.
+# CLI: terminal-state-netplay --server | --client [addr] | --port <N>
+# It wires together ts_net (wire types + plugin), bevy_replicon_renet (UDP transport),
+# re_present (terminal IO + input), re_render (raycaster → Framebuffer), re_world
+# (map + camera + collision), and re_level (.lvl arena loader).
+#
+# NEVER built as part of the `dist` profile — the shipped artifact is `-p re_game`
+# only. This is a testbed, not a shipping product.
+
+[lib]
+name = "ts_netplay"
+path = "src/lib.rs"
+
+[[bin]]
+name = "terminal-state-netplay"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+glam = { workspace = true }
+ts_net = { workspace = true }
+# bevy_replicon: replication rules, client messages (FromClient), ServerPlugin,
+# RepliconPlugins, ClientState/ServerState, ConnectedClient, Replicated.
+bevy_replicon = { workspace = true }
+# bevy_replicon_renet 0.20.0 — the renet/UDP transport for bevy_replicon.
+# Requires: bevy_replicon ^0.44, renet/renet_netcode 2.0, bevy_app/ecs/time 0.19
+# only (NO render/winit in production deps — verified from crate Cargo.toml).
+# We use client+server+renet_netcode for the localhost testbed.
+# Headless-clean. Re-verified 2026-09-28 — 0.20.0 still newest.
+bevy_replicon_renet = { workspace = true }
+re_present = { workspace = true, default-features = false, features = ["backend-terminal"] }
+re_render = { workspace = true }
+re_world = { workspace = true }
+re_level = { workspace = true }
+re_core = { workspace = true }

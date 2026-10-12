@@ -1,0 +1,70 @@
+# terminal3d example level — levels/09-code-wall.lvl
+#
+# THE STRANGE LOOP, made visible. (NOT a shipped puzzle — a demo fixture.)
+#
+# The perimeter walls are bound to the `codewall` material: the renderer lays its
+# OWN annotated source onto the wall face as readable terminal-green text. Panel 0
+# is `re_render::code_wall` — the very module that draws code on the wall, drawn
+# on the wall. Walk up to a wall and you read the routine that put the glyph
+# there.
+#
+# A dying machine shows you its wiring. This is the wiring.
+#
+#   $ cat /proc/self/maps | head
+#   the walls are the source. the source is the wall. you are reading the loop.
+#
+# Prove it:
+#   cargo run -p re_imgqa -- levels/09-code-wall.lvl
+
+[meta]
+name        = 09-code-wall
+title       = The Source Is The Wall
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+# Bind the solid wall surface to a CodeWall material. `panel = 0` shows the
+# code_wall renderer reflecting itself. fg/bg here are only fallbacks — the
+# codewall recipe drives its own phosphor-green-on-black palette per character
+# class (code vs comment vs blank).
+[material source_wall]
+fg          = #45D962
+bg          = #03060A
+recipe      = codewall panel=0
+surface     = wall_solid
+
+# A minimal solvable graph so the level is a real, loadable level (one input →
+# one output, one switch), not just scenery. The puzzle is beside the point here;
+# the WALL is the point.
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 5 1
+facing       = +y
+
+# Near-black green-tinted haze, pushed back so the wall text stays legible up
+# close while distance still fogs.
+[palette]
+fog_color   = #04100A
+fog_near    = 4.0
+fog_far     = 18.0

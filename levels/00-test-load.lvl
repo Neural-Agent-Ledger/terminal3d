@@ -1,0 +1,93 @@
+# terminal3d example level — levels/00-test-load.lvl
+#
+# Minimal hand-crafted level used by level_load smoke tests + lvlcheck CI.
+# NOT a playable puzzle — exercises every [section] type so the parser is
+# stretched along its full surface.
+#
+# Layout: 6×6×4 room. One input ("size"), one hidden ("is_mammal"),
+# one output ("output"). Two pipes: size->is_mammal, is_mammal->output.
+# One part ("body"). One emit clause. Pedestal volume 3×3×2 at (3,3,1).
+# Door at (0,3,1). Player at (3,3,0).
+
+[meta]
+name        = 00-test-load
+version     = 1
+title       = Test Load
+spec_rev    = 2026-06-15
+
+[room]
+size        = 6 6 4
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+[wall_decal matrix_panel_n]
+surface     = matrix
+region      = (1,0,1)-(3,0,3)
+density     = 0.2
+color_head  = #00FF66
+color_tail  = #003020
+
+[node size]
+pos          = 1,2,1
+glyph        = s
+pool         = TINY SMALL
+pool_alt     = малый
+color        = #E8E8FF
+is_input     = yes
+
+[node is_mammal]
+pos          = 3,2,1
+glyph        = M
+pool         = MAMMAL WARM
+color        = #B09CFF
+threshold    = 1
+
+[node output]
+pos          = 4,2,1
+glyph        = O
+pool         = OUTPUT
+color        = #FFFFFF
+threshold    = 1
+is_output    = yes
+
+[pipe size->is_mammal]
+state        = ON
+path         = (1,2,1) (3,2,1)
+switch_at    = (2,2,1)
+density      = 0.7
+
+[pipe is_mammal->output]
+state        = ON
+path         = (3,2,1) (4,2,1)
+density      = 0.7
+
+[part body]
+size         = 3 3 2
+mask         =
+.#.
+###
+.#.
+###
+###
+###
+color        = #B09CFF
+offset       = 0 0 0
+
+[emit is_mammal=1]
+parts        = body
+
+[inputs]
+size         = 1
+
+[pedestal]
+center       = 3 3 1
+volume       = 3 3 2
+
+[door]
+pos          = 0 3 1
+target_model = test
+
+[player]
+spawn        = 3 3 0
+facing       = -y

@@ -1,0 +1,19 @@
+[package]
+name = "re_puzzle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# `glam`/`re_core`/`re_world` were removed 2026-09-28 (dependency-refresh
+# pass) — grep found zero uses; the puzzle runtime operates entirely on
+# `re_level::{Level, PipeState}`, never touching world geometry or glam types
+# directly.
+[dependencies]
+bevy = { workspace = true }
+re_level = { workspace = true }
+
+[dev-dependencies]
+# (tests load real files from repo-root levels/ via re_level)

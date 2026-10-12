@@ -1,0 +1,90 @@
+# terminal3d example level — levels/12-mirror.lvl
+#
+# MIRROR / REFLECTION fixture (NOT a shipped puzzle — a demo fixture for the
+# reflective-surface stream). Proves the raycaster's one-bounce mirror end-to-end:
+# a wall surface marked `reflective = true` shows the REFLECTED scene (tinted with a
+# cool sheen, degraded by CLARITY) instead of its own surface.
+#
+# Layout: a 9x9x4 brick room. The SOUTH wall (high y) is a MIRROR. The NORTH wall
+# (y=0) carries a vivid MATRIX decal — a deliberately distinct surface. The player
+# stands mid-room facing SOUTH (+y) at the mirror. The mirror's reflected ray
+# bounces back NORTH and lands on the matrix wall, so the mirror cell shows the
+# REFLECTED matrix wall — visibly different from the plain brick it would show if it
+# were not reflective.
+#
+# CLARITY: the mirror material authors `clarity = 0.85` (a mostly-crisp reflection
+# with a faint imperfection). The game can override every mirror's clarity LIVE via
+# the renderer's `MirrorClarity` resource to animate a recognition beat — the
+# reflection resolving from glitch/empty (0) to crisp (1) as a memory is recovered.
+#
+# Prove it (the mirror cell shows a reflection, distinct from a plain wall):
+#   cargo run -p re_imgqa -- levels/12-mirror.lvl
+
+[meta]
+name        = 12-mirror
+title       = The Reflection Resolves
+
+[room]
+size        = 9 9 4
+ambient     = solid
+
+# THE MIRROR. Bind the trace wall surface to a reflective material; the south-wall
+# decal below paints that surface onto the south wall only, so just that wall
+# reflects. fg/bg are the sheen fallbacks (the reflection itself supplies colour).
+# `clarity` is the STARTING clarity; the game drives it live for the recognition
+# beat. `reflective = true` is the one flag that makes the raycaster reflect.
+[material mirror_glass]
+fg          = #C8D2FF
+bg          = #05060A
+surface     = wall_trace
+reflective  = true
+clarity     = 0.85
+
+# A vivid green MATRIX wall the mirror will reflect — the distinct geometry that
+# makes the reflection unmistakably NOT a plain brick wall.
+[material green_matrix]
+fg          = #38FF9A
+bg          = #02100A
+glyph       = #
+recipe      = grain scale=2.5 speck=0.6 tile_eps=0.06
+surface     = wall_matrix
+
+# The mirror surface: paint the trace (reflective) surface across the SOUTH wall
+# (y = 8), full height.
+[wall_decal mirror_south]
+surface     = trace
+region      = (1,8,1)-(7,8,3)
+
+# The reflected target: a matrix panel across the NORTH wall (y = 0), full height.
+[wall_decal matrix_north]
+surface     = matrix
+region      = (1,0,1)-(7,0,3)
+
+# A minimal solvable graph so this is a real, loadable level (one input → one
+# output, one switch), not just scenery. The puzzle is beside the point; the MIRROR
+# is the point.
+[node in_a]
+pos          = 2,4,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 6,4,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,4,2) (6,4,2)
+
+[pedestal]
+center       = 6 4 1
+volume       = 1 1 1
+
+[door]
+pos          = 8 4 1
+
+# Stand mid-room, looking SOUTH (+y) straight at the mirror wall.
+[player]
+spawn        = 4 4 1
+facing       = +y

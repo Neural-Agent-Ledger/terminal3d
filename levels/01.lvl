@@ -1,0 +1,105 @@
+# terminal3d example level — levels/01.lvl
+#
+# L1 — one input node (R) drives a single pipe through one switch to a
+# threshold-1 output node behind the exit door. One node, one pipe, one
+# switch; the output emits a solid red block once the pipe is toggled on.
+
+[meta]
+name        = level-01-first-pulse
+title       = First Pulse
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 12 8 4
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# ── COLOR-FORWARD palette (matches the calibration look, levels 10/11) ───────
+# L1 colour concept: cold-start black void + RED first light. Three element hues over a
+# near-black body, orthogonal so each surface reads its own kind at a glance:
+#   walls   — hot signal-red brick on black (the first pulse, dominant identity)
+#   floor   — cool steel-blue grain, lower luma + opposite hue → strong wall/floor seam
+#   ceiling — dark slate sky, darkest surface so "up" reads instantly and recedes
+# Clean recipes (brick seams / low grain / sparse sky) keep glyphs sparse;
+# saturated color carries the volume.
+[material pulse_wall]
+fg          = #FF4848
+bg          = #160505
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.30
+surface     = wall_solid
+
+[material pulse_floor]
+fg          = #6FA6CE
+bg          = #08111E
+recipe      = grain scale=3.0 speck=0.15
+surface     = floor
+
+[material pulse_ceiling]
+fg          = #3A4658
+bg          = #050608
+recipe      = sky scale=6.0 density=0.06
+surface     = ceiling
+
+[palette]
+fog_color   = #100406
+fog_near    = 3.0
+fog_far     = 16.0
+
+[node R]
+pos          = 3,3,2
+glyph        = R
+pool         = FIRE BLOOD ANGER ALARM PASSION ROSE FLAME DAWN BRICK STOP
+pool_alt     = огонь кровь пламя гнев 火 紅 fuego sangre feu Feuer
+color        = #FF4040
+is_input     = yes
+
+[node output]
+pos          = 9,3,2
+glyph        = O
+pool         = OUTPUT MODEL LIGHT
+pool_alt     = выход モデル salida sortie
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+[pipe R->output]
+state        = OFF
+path         = (3,3,2) (9,3,2)
+switch_at    = (6,3,2)
+density      = 0.7
+
+[part red_block]
+size         = 2 2 2
+mask         =
+##
+##
+
+##
+##
+color        = #FF4040
+offset       = 0 0 0
+
+[emit output=1]
+parts        = red_block
+
+[inputs]
+R            = 1
+
+[pedestal]
+center       = 6 4 2
+volume       = 2 2 2
+
+[door]
+pos          = 11 3 1
+target_parts = output
+
+[player]
+# Spawn just EAST of the switch, looking WEST (-x) back down the R→switch→output
+# run so the first pulse is dead ahead. Nudged one cell west of the old (8,3,1)
+# so the NEAREST puzzle element is the switch at (6,3,2) — which lies in the -x
+# facing direction — clearing the lvlcheck spawn-facing WARN while keeping the
+# switch reachable and the level solvable/reachable.
+spawn        = 7 3 1
+facing       = -x

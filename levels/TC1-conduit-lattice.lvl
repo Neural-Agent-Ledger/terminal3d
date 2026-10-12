@@ -1,0 +1,87 @@
+# terminal3d example level — levels/TC1-conduit-lattice.lvl
+#
+# EDGE-MATCHED TILING fixture: ornament that CONTINUES across cell boundaries
+# (render fixture, NOT a shipped puzzle).
+#
+# WHY THIS EXISTS
+#   Every other procedural recipe in `re_render` samples each cell independently —
+#   an fBm tap, a hash, a modulo lattice — which gives TEXTURE but never STRUCTURE.
+#   A crack stops at the cell edge. A brick bond does not interlock. A conduit does
+#   not run anywhere; it speckles. `preset = conduit` is the one recipe where a
+#   feature entering a cell leaves it again on the other side.
+#
+# THE TRICK (`re_render::truchet`)
+#   A Wang tile is a square with a colour per side and neighbours must agree on the
+#   side they share. The usual way to satisfy that is placement + backtracking, which
+#   needs state and a scan order. The procedural way needs neither: derive each
+#   EDGE's bit from a hash of THAT EDGE's own coordinates. A cell's north edge and
+#   its neighbour's south edge are then the same function call on the same arguments,
+#   so agreement is not enforced — it is structural. Still O(1) per cell, no storage,
+#   no order, fully deterministic, and therefore golden-safe.
+#
+# WHAT TO LOOK FOR — and the bug this level was built to catch
+#   Runs must continue BOTH ways. The recipe first shipped indexing its tile from
+#   `coord`, which is the world hit on a FLOOR but not on a WALL: `sample_coord`
+#   builds a wall's `coord.x` as `tex_u + floor(the face's CONSTANT axis)`, one and
+#   the same offset for every cell of a flat run. So the tile index never changed
+#   along a wall and every screen row rendered as ONE box-drawing glyph repeated end
+#   to end. It looked like a deliberate stripe, not like a broken lattice, which is
+#   why it needed a dump to find. The sampler now reads the WALL PLANE
+#   (`wall_along`, `wall_up`) on a wall and `coord` on a floor — both advance one
+#   unit per world cell — and `truchet::WALL_SCALE` subdivides each cell so a tile is
+#   about one glyph rather than a whole cell smeared into one.
+#
+#   So: read along any horizontal run and it should stay connected across many cells;
+#   junctions (three or four ways) are inked brighter than plain runs, so the lattice
+#   reads as branching pipework rather than as noise.
+#
+# Dump it with:
+#   cargo run -p re_imgqa -- levels/TC1-conduit-lattice.lvl
+
+[meta]
+name        = TC1-conduit-lattice
+title       = Conduit Lattice — edge-matched Truchet tiling
+
+[room]
+size        = 13 13 5
+ambient     = solid
+
+# The lattice on the WALLS — the surface it is designed for, and the one whose
+# coordinate seam the recipe had to be fixed against.
+[material conduit_wall]
+preset      = conduit
+surface     = wall_solid
+
+# The same lattice on the FLOOR, where `coord` already IS the world hit. Both
+# surfaces must show a connected field; if only one does, the plane wiring is wrong.
+[material conduit_floor]
+preset      = conduit
+surface     = floor
+
+# Minimal puzzle scaffolding so the loader is satisfied (render fixture, not a puzzle).
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 10,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (10,2,2)
+
+[pedestal]
+center       = 10 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 12 6 1
+
+# Centred, facing the +y wall, far enough back that a long horizontal run is on
+# screen in one frame — continuity is only visible over distance.
+[player]
+spawn        = 6 6 1
+facing       = +y

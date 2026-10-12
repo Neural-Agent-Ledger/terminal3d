@@ -1,0 +1,78 @@
+# terminal3d example level — levels/91-recipe-kinds.lvl
+#
+# Fixture, not a puzzle: one surface per PATTERN RECIPE that used to be reachable
+# only through `preset = NAME`. Every `[material]` below authors its recipe
+# directly with `recipe = KIND k=v …`, so this file is the parse → render proof
+# for the five kinds and the example sheet for docs/MATERIALS.md § "Authoring a
+# recipe directly". Render it with:
+#   cargo run -p re_imgqa -- levels/91-recipe-kinds.lvl
+
+[meta]
+name        = level-91-recipe-kinds
+title       = Recipe Kinds
+
+[room]
+size        = 12 12 5
+ambient     = solid
+
+# CRT raster / brushed metal / grate / weave: filled directional bands.
+[material walls]
+recipe      = scanline freq=9 duty=0.55 warp=0.05 axis=0
+fg          = #7FD0FF
+bg          = #10202C
+surface     = wall_solid
+
+# Edge-matched conduit lattice: runs that continue across cell boundaries.
+[material panels]
+recipe      = truchet seed=7 density=0.5 scale=4
+fg          = #E0C070
+bg          = #241C08
+surface     = wall_trace
+
+# Log-polar self-similar portal field; `arms=0` is pure rings.
+[material screens]
+recipe      = fractal arms=3 octave_warp=0.3 twist=0.2
+fg          = #FF70D0
+bg          = #200818
+surface     = wall_matrix
+
+# The cell alphabet as a static wall field.
+[material ground]
+recipe      = substrate scale=3 held=0.55 released=0.3
+fg          = #A0A0A0
+bg          = #101010
+surface     = floor
+
+# The same alphabet driven by the level's solve-progress mark (keyword channel).
+[material roof]
+recipe      = voice scale=3 mode=release
+fg          = #80FF80
+bg          = #081008
+surface     = ceiling
+
+[node a]
+pos         = 2 6 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 9 6 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,6,2) (9,6,2)
+
+[pedestal]
+center      = 9 6 1
+volume      = 1 1 1
+
+[door]
+pos         = 11 6 1
+target_parts = b
+
+[player]
+spawn       = 5 6 1
+facing      = +x

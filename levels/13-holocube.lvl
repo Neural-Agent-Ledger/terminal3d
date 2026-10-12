@@ -1,0 +1,71 @@
+# terminal3d example level — levels/13-holocube.lvl
+#
+# HOLOGRAM OBJECT fixture (NOT a shipped puzzle — a demo fixture for the
+# transparent-wireframe hologram stream). Proves the raycaster's hologram pass
+# end-to-end: a `[holo]` object is a set of TRANSPARENT `CellKind::Hologram`
+# voxels the ray passes THROUGH (the scene behind shows), rendered as a glowing
+# depth-coloured CONTOUR wireframe with horizontal scanlines.
+#
+# THE LOOK (a sci-fi projection):
+#   * FILL is see-through — the wall behind the cube renders through its body.
+#   * FRONT silhouette/edges + the glyphs are ONE colour: bright hologram BLUE.
+#   * BACK / SIDE edges (seen through the body) are a softer, dimmer CYAN, so
+#     depth reads near→far as bright-blue → faint-cyan.
+#   * Every 4th screen row over the object is a blue scanline (drifts down over
+#     time in the live game; static at the t=0 dump).
+#
+# Layout: a 13x13x6 brick room. A holographic CUBE floats in the middle of the
+# room. The player stands near the SOUTH wall looking NORTH (-y) straight at it,
+# so the cube sits between the camera and the far (north) wall — proving the wall
+# shows THROUGH the transparent body.
+#
+# Prove it:
+#   cargo run -p re_imgqa -- levels/13-holocube.lvl
+
+[meta]
+name        = 13-holocube
+title       = The Hologram Projects
+
+[room]
+size        = 13 20 6
+ambient     = solid
+
+# THE HOLOGRAM CUBE. A 3x3x3 box of transparent hologram voxels floating in the
+# middle of the room (x 5..7, y 9..11, z 1..3). `shape = box` ⇒ a wireframe cube;
+# `style = 0` ⇒ the default blue look. The cube spans the camera's z-plane (the
+# 2.5D caster samples the eye's z-layer), so its silhouette intersects the view.
+[holo cube]
+shape       = box
+region      = (5,9,1)-(7,11,3)
+style       = 0
+
+# A minimal solvable graph so this is a real, loadable level (one input → one
+# output, one switch), not just scenery. The puzzle is beside the point; the
+# HOLOGRAM is the point.
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 10,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (10,2,2)
+
+[pedestal]
+center       = 10 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 12 10 1
+
+# Stand near the SOUTH wall (high y), looking NORTH (-y) straight through the cube
+# toward the far wall — far enough that the cube floats with the wall visible
+# around and through it.
+[player]
+spawn        = 6 15 1
+facing       = -y

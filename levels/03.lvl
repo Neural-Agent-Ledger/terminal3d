@@ -1,0 +1,153 @@
+# terminal3d example level — levels/03.lvl
+#
+# L3 — three input nodes (R, G, B; all source 1) feed two threshold-2 hidden
+# nodes, h1 (from R, B) and h2 (from G, R, B), both driving a shared
+# threshold-1 output. Both hidden nodes must fire to satisfy the door.
+
+[meta]
+name        = level-03-full-spectrum
+title       = Full Spectrum
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 16 16 5
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# Showcase: a cold, drifting chamber. Light snow over a deep cold-blue fog.
+[effects]
+snow        = 0.4
+
+[palette]
+fog_color   = #101826
+fog_near    = 2.0
+fog_far     = 14.0
+
+[node R]
+pos          = 2,3,2
+glyph        = R
+pool         = FIRE BLOOD ROSE FLAME DAWN BRICK CRIMSON RUBY EMBER GARNET
+pool_alt     = огонь кровь 火 紅 fuego rouge Feuer أحمر vermelho
+color        = #FF4040
+is_input     = yes
+
+[node G]
+pos          = 2,8,2
+glyph        = G
+pool         = LEAF MOSS GRASS FOREST MINT JADE FERN VINE SPRING CHLOROPHYLL
+pool_alt     = зелёный 緑 verde vert grün 翠 lush 草
+color        = #40FF40
+is_input     = yes
+
+[node B]
+pos          = 2,12,2
+glyph        = B
+pool         = SEA SKY OCEAN COBALT SAPPHIRE TWILIGHT FROST GLACIER INK NIGHT
+pool_alt     = синий море 青 蒼 azul bleu blau небо océan
+color        = #4080FF
+is_input     = yes
+
+[node h1]
+pos          = 8,5,2
+glyph        = M
+pool         = MAGENTA VIOLET DUSK BRUISE WINE BERRY ORCHID FUCHSIA
+pool_alt     = пурпур 紫 magenta violet violeta lila 茜
+color        = #FF40FF
+threshold    = 2
+
+[node h2]
+pos          = 8,10,2
+glyph        = T
+pool         = TEAL CYAN AQUA TURQUOISE LAGOON MIST GLAZE
+pool_alt     = бирюза 青緑 cian cyan türkis 海色
+color        = #40D0D0
+threshold    = 2
+
+[node output]
+pos          = 14,7,2
+glyph        = O
+pool         = OUTPUT MODEL EMIT SHINE PEDESTAL
+pool_alt     = выход モデル salida sortie Modell
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+[pipe R->h1]
+state        = OFF
+path         = (2,3,2) (8,3,2) (8,5,2)
+switch_at    = (5,3,2)
+density      = 0.7
+
+[pipe B->h1]
+state        = OFF
+path         = (2,12,2) (2,12,3) (8,12,3) (8,5,3) (8,5,2)
+switch_at    = (5,12,3)
+density      = 0.7
+
+[pipe G->h2]
+state        = OFF
+path         = (2,8,2) (8,8,2) (8,10,2)
+switch_at    = (5,8,2)
+density      = 0.7
+
+# R->h2 is the long cross-room link. Previously it climbed into the ceiling
+# layer (z=4) and stranded its switch at (5,3,4) — physically unreachable. It is
+# now routed as a SPLINE that bends smoothly through reachable air (z=1..2),
+# arcing across the room without leaving standable space. The switch sits on the
+# generated path at a reachable cell.
+[pipe R->h2]
+state        = OFF
+spline       = (2,3,2) (5,2,1) (8,6,2) (7,10,2) (8,10,2)
+switch_at    = (5,2,1)
+density      = 0.6
+
+[pipe B->h2]
+state        = OFF
+path         = (2,12,2) (8,12,2) (8,10,2)
+switch_at    = (5,12,2)
+density      = 0.6
+
+[pipe h1->output]
+state        = OFF
+path         = (8,5,2) (14,5,2) (14,7,2)
+switch_at    = (11,5,2)
+density      = 0.7
+
+[pipe h2->output]
+state        = OFF
+path         = (8,10,2) (14,10,2) (14,7,2)
+switch_at    = (11,10,2)
+density      = 0.7
+
+[part magenta_block]
+size         = 2 2 2
+mask         =
+##
+##
+
+##
+##
+color        = #FF40FF
+offset       = 0 0 0
+
+[emit output=1]
+parts        = magenta_block
+
+[inputs]
+R            = 1
+G            = 1
+B            = 1
+
+[pedestal]
+center       = 11 7 1
+volume       = 2 2 2
+
+[door]
+pos          = 15 7 1
+target_parts = output
+
+[player]
+spawn        = 12 7 1
+facing       = -x

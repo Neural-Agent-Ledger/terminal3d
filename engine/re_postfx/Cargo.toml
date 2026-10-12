@@ -1,0 +1,23 @@
+[package]
+name = "re_postfx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# `re_postfx` — a deterministic, composable POST-PROCESS "shader" stack over the
+# raycaster's shaded Framebuffer: cinematic / screen-space effects (edge-outline,
+# SSAO, bloom, depth-of-field, color-grade, vignette, dither). Engine-pure:
+# depends ONLY on re_core (the Framebuffer/Cell types) + glam (math). ZERO
+# terminal / game / bevy_render dependencies — every effect is a pure function of
+# (frame, config).
+#
+# It DOES depend on `bevy` (mirroring re_core / re_glitch) only to expose
+# `PostfxConfig` / `PostfxPlugin` as a Bevy resource + plugin. The pure core
+# (`apply_postfx`) needs none of that and is what the tests exercise.
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+glam = { workspace = true }
+re_core = { workspace = true }

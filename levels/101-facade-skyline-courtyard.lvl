@@ -1,0 +1,178 @@
+# terminal3d example level — levels/101-facade-skyline-courtyard.lvl
+#
+# FACADE / SKYLINE COURTYARD — demo level for two facade/sky visual features.
+# NOT a shipped puzzle (a trivial one-input->one-output graph so it loads + is
+# nominally solvable); its reason to exist is to be WALKED and LOOKED at,
+# ceiling open to the sky.
+#
+# What is on show:
+#   * FACADE RECIPE — `re_render::facade`, a bay x floor window-grid
+#     texel function. THREE styles are on the perimeter walls so the grid,
+#     the lit/dark rhythm, and the per-style glyph vocabulary can all be
+#     compared side by side without leaving the courtyard:
+#       - south + west walls (the default `wall_solid` binding): OFFICE
+#         (bay=3, floor=4, lit=0.35) — regular mullioned bays.
+#       - north wall (`[zone north_face]`): RESIDENTIAL (bay=4, floor=6,
+#         lit=0.4) — wider, taller units, warmer lit fraction.
+#       - east wall (`[zone east_face]`): INDUSTRIAL (bay=2, floor=2,
+#         lit=0.25, ground_band=on) — tight bays, many floors, a solid
+#         ground-floor band at the base.
+#   * SKYLINE SKY LAYER — `re_render::sky::skyline`, `[sky] kind =
+#     skyline` (the preset stack: a sparse starfield + the skyline layer
+#     itself). Distant towers reuse the SAME facade texel function, so their
+#     window rhythm reads as the same city language as the courtyard walls;
+#     a landmark spire blinks a beacon at dusk. The ceiling is a VOID
+#     material so every upward ray escapes to the sky sampler instead of a
+#     solid roof — the whole point of this fixture is to see a city beyond
+#     the walls, not just the walls themselves.
+#
+# Prove it:
+#   cargo run -p re_imgqa -- levels/101-facade-skyline-courtyard.lvl
+
+[meta]
+name        = 101-facade-skyline-courtyard
+title       = Facade / Skyline Courtyard
+
+# A modest open-top courtyard: 22x22 footprint, 9 cells tall (a LOW parapet
+# wall on purpose — visual-review pass 2, 2026-09-27 (real-world): the skyline layer must
+# be visible OVER the courtyard wall from ordinary eye height, and at the
+# previous 18-cell height the wall's own angular height from a ~11-cell
+# standing distance (~55 degrees) exceeded any reasonable vertical FOV, so no
+# `--dump` framing ever cleared the roofline into open sky. At 9 cells the
+# wall subtends roughly 25-30 degrees from courtyard centre — comfortably
+# inside frame — while still giving each facade style 8-13 window floors
+# (`floor_h` 2..6) to show its bay/floor rhythm up close.
+[room]
+size        = 22 22 9
+ambient     = solid
+
+# SKYLINE, tuned for a LOW-WALLED courtyard rather than the `kind = skyline`
+# shorthand's flat-plaza defaults (visual-review pass 2, 2026-09-27 (real-world)): the
+# shorthand's tower height range (dome-height fraction 0.12..0.55, i.e. only
+# ~2..45 degrees of pitch) is tuned for an unobstructed skyline seen from open
+# ground, where even a short tower's base is visible down to the horizon. Here
+# the courtyard's own parapet wall already occludes roughly the bottom 25-30
+# degrees of pitch in every direction, so most of that default range sat
+# entirely BEHIND the wall and no tower ever poked into view. `height=0.3..0.85`
+# shifts the whole band above the wall's occlusion; `density=0.9` and fewer,
+# WIDER `blocks=64` (vs. the default 96) give each visible tower more angular
+# width so it reads as a building rather than a sliver.
+[sky]
+layer       = stars density=0.01
+layer       = skyline blocks=64 density=0.9 height=0.3..0.85 style=office lit=0.35 landmark_rate=0.12
+
+# VOID CEILING: rays angling upward pass straight through to the skyline sky
+# instead of hitting a solid roof.
+[material open_sky]
+preset      = void
+surface     = ceiling
+
+# Plain, low-contrast paving so the eye reads the walls and the sky, not the
+# floor.
+[material courtyard_floor]
+fg          = #2A2E34
+bg          = #0A0C10
+recipe      = grain scale=4.0 speck=0.18 tile_eps=0.06
+surface     = floor
+
+# DEFAULT PERIMETER — OFFICE facade (south + west walls; overridden on north
+# and east by the zones below). `preset = facade` pulls the CATALOG facade's
+# own `LightModel::FLAT` (see `re_render::ascii_shader::mat_facade` — flat by
+# design, the window rhythm is entirely the texel's own ink/glyph, not a
+# height-field relief) as the base; a bare `fg`/`bg`/`recipe` with no preset
+# would otherwise inherit the WALL_SOLID SURFACE BUILTIN's brick relief
+# lighting instead, which reads Facade's constant `height_at()` as a flat,
+# nearly-unlit face under this level's directional key. `recipe =` below
+# still overrides the preset's own (Office-default) knobs.
+[material wall_office]
+preset      = facade
+fg          = #D8D4BC
+bg          = #1C222C
+recipe      = facade style=office bay=3.0 floor=4.0 lit=0.4 seed=11 ground_band=off sign_row=off
+surface     = wall_solid
+
+# NORTH WALL — RESIDENTIAL facade: wider bays, taller storeys, warmer lit
+# fraction. Faces the player at spawn. `preset = facade` for the same
+# FLAT-light reason as `wall_office` above.
+[material wall_residential]
+preset      = facade
+fg          = #E8D8B8
+bg          = #202420
+recipe      = facade style=residential bay=4.0 floor=6.0 lit=0.45 seed=22 ground_band=off sign_row=off
+
+[zone north_face]
+region      = (0,0,0)-(21,0,8)
+material    = wall_residential
+scale       = none
+
+# EAST WALL — INDUSTRIAL facade: tight bays, many floors, a solid ground-floor
+# band anchoring the base. `preset = facade` for the same FLAT-light reason as
+# `wall_office` above.
+[material wall_industrial]
+preset      = facade
+fg          = #C0CCD8
+bg          = #181C24
+recipe      = facade style=industrial bay=2.0 floor=2.0 lit=0.3 seed=33 ground_band=on sign_row=off
+
+[zone east_face]
+region      = (21,0,0)-(21,21,8)
+material    = wall_industrial
+scale       = none
+
+# ── ATMOSPHERE ────────────────────────────────────────────────────────────────
+# An OPEN-TOP courtyard under a night sky reads by ambient + moon-key light,
+# not by point lamps — raised well past the shipped corpus's indoor `0.05-0.2`
+# band (those are lamp-lit interiors; this has no roof) so the three facade
+# walls' window rhythm is actually legible rather than a near-black mottle.
+# `key_dir` points mostly straight down (steep +z) with a small +x/+y lean so
+# every wall picks up SOME directional shading instead of the one directly
+# opposite the key going flat-ambient-only.
+[atmosphere]
+key_dir     = 0.35, 0.35, 1.0
+key_color   = #C8D8F4
+ambient     = 0.65
+
+# Cool night fog, pushed far enough out that all three facade styles (up to
+# the ~31-cell diagonal) stay legible while the far corners still fall away
+# into the sky's own horizon tint.
+[palette]
+fog_color   = #05070C
+fog_near    = 10.0
+fog_far     = 34.0
+
+# ── MINIMAL PUZZLE — one input, one output, fully winnable ───────────────────
+[node source]
+pos         = 9 9 2
+glyph       = A
+is_input    = yes
+
+[node sink]
+pos         = 13 9 2
+glyph       = O
+is_output   = yes
+threshold   = 1
+
+[pipe source->sink]
+state       = OFF
+path        = (9,9,2) (13,9,2)
+switch_at   = (11,9,2)
+density     = 0.8
+
+[inputs]
+source      = 1
+
+[pedestal]
+center      = 13 9 1
+volume      = 1 1 1
+
+[door]
+pos         = 13 7 1
+target_parts = sink
+
+# Centre-south of the courtyard, facing north: the RESIDENTIAL far wall is
+# ~13 cells dead ahead (tall enough at this footprint to read clearly), the
+# INDUSTRIAL east wall is in peripheral view, and the open skyline dome
+# fills the top of the frame.
+[player]
+spawn       = 11 13 2
+facing      = -y

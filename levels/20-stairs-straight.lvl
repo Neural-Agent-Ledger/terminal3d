@@ -1,0 +1,192 @@
+# terminal3d example level — levels/20-stairs-straight.lvl
+#
+# DEMO · STRAIGHT STAIRCASE — a 2-storey arena with one climbable 45° straight
+# staircase connecting floor 0 (z=0..3) to floor 1 (z=4..7).
+#
+# storey_height = 4  (4 ramp treads per storey, matching the prefab generator).
+#
+# Staircase: base=(3,3,0), dir=PosX, storey_height=4.
+#   Tread 1: (4,3,1)  rampz posx
+#   Tread 2: (5,3,2)  rampz posx
+#   Tread 3: (6,3,3)  rampz posx
+#   Tread 4: (7,3,4)  rampz posx
+#   Landing: (8,3,4)  WallSolid Full
+#
+# Spawn on floor 0: (2,3,1) facing +x → walks east along the staircase corridor.
+# Goal on floor 1: interact the switch on upper floor to win.
+#
+# Render (floor-0 view, facing east):
+#   cargo run -p re_imgqa -- levels/20-stairs-straight.lvl
+# Interactive play requires a host game binary built on this engine.
+
+[meta]
+name        = 20-stairs-straight
+title       = Straight Staircase Demo
+
+[room]
+size        = 16 7 9
+ambient     = solid
+storey_height = 4
+
+[material walls]
+fg          = #9AA0AC
+bg          = #12161E
+recipe      = brick aspect=2.0 mortar_w=0.14 grain=0.18
+surface     = wall_solid
+
+[material ground]
+preset      = metal
+surface     = floor
+
+[material roof]
+preset      = void
+surface     = ceiling
+
+# ── Dense [cells] grid ────────────────────────────────────────────────────────
+# 16 cols (x=0..15) × 7 rows (y=0..6) × 9 z-layers.
+# '#' = WallSolid   '.' = Empty   '_' = Floor   '^' = Ceiling
+#
+# Staircase at y=3, walking +x:
+#   z=1: tread 1 at x=4  (cell (4,3,1) = '#' + rampz posx)
+#   z=2: tread 2 at x=5  (cell (5,3,2) = '#' + rampz posx)
+#   z=3: tread 3 at x=6  (cell (6,3,3) = '#' + rampz posx)
+#   z=4: tread 4 at x=7  (cell (7,3,4) = '#' + rampz posx)
+#         landing at x=8  (cell (8,3,4) = '#' WallSolid Full)
+#   x=4..6 at z=4 are open '.' (stairwell shaft) so player can emerge.
+[cells]
+size        = 16 7 9
+
+# z=0 — floor-0 slab.
+________________
+________________
+________________
+________________
+________________
+________________
+________________
+
+# z=1 — floor-0 gameplay space. Ramp tread 1 at (4,3,1).
+################
+#..............#
+#..............#
+#...#..........#
+#..............#
+#..............#
+################
+
+# z=2 — floor-0 gameplay space. Ramp tread 2 at (5,3,2).
+################
+#..............#
+#..............#
+#....#.........#
+#..............#
+#..............#
+################
+
+# z=3 — floor-0 gameplay space. Ramp tread 3 at (6,3,3).
+################
+#..............#
+#..............#
+#.....#........#
+#..............#
+#..............#
+################
+
+# z=4 — floor-1 plane.
+# Floor '_' everywhere interior except:
+#   x=4..6 at y=3: open '.' (stairwell shaft — player emerges here from below)
+#   x=7 at y=3:    '#' = ramp tread 4 (rampz posx)
+#   x=8 at y=3:    '#' = landing (WallSolid Full)
+################
+#______________#
+#______________#
+#___...##______#
+#______________#
+#______________#
+################
+
+# z=5 — floor-1 gameplay space.
+################
+#..............#
+#..............#
+#..............#
+#..............#
+#..............#
+################
+
+# z=6 — floor-1 gameplay space.
+################
+#..............#
+#..............#
+#..............#
+#..............#
+#..............#
+################
+
+# z=7 — floor-1 gameplay space.
+################
+#..............#
+#..............#
+#..............#
+#..............#
+#..............#
+################
+
+# z=8 — ceiling slab.
+^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^
+
+# Staircase geometry: ramp shapes for the 4 treads.
+shapes =
+4 3 1 rampz posx
+5 3 2 rampz posx
+6 3 3 rampz posx
+7 3 4 rampz posx
+
+# ── Minimal puzzle so this is a real level ────────────────────────────────────
+# The switch and output sit on floor 1. The player must climb the stairs to win.
+
+[node a]
+pos         = 2 3 5
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 12 3 5
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,3,5) (12,3,5)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #80C0FF
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 10 3 4
+volume      = 1 1 1
+
+[door]
+pos         = 14 3 4
+target_parts = b
+
+# Spawn on floor 0, facing +x (east, toward the staircase).
+[player]
+spawn       = 2 3 1
+facing      = +x

@@ -1,0 +1,97 @@
+# terminal3d example level — levels/93-warp-portal.lvl
+#
+# Non-euclidean WARP-PORTAL demo (Stage 3: authored via the `.lvl` `[portal]`
+# section, NOT the hardcoded `inject_demo_portal_pair` scaffold). It reproduces
+# the Stage-1/2 demo corner — a NORTH-wall opening linked to a WEST-wall opening
+# by a reciprocal `delta` — but declaratively, so the level file is the single
+# source of truth and render + teleport agree.
+#
+# Layout: a TALL (z=10), DEEP (y=16) room. The player stands at the far SOUTH end
+# (high y) looking NORTH (-y). The NORTH wall is a portal (region_a); walking
+# straight into it teleports you out of the WEST wall (region_b) — a seamless
+# non-euclidean 90-degree turn. x = west->east, y = north->south, z = floor->ceiling.
+#
+#   cargo run -p re_imgqa -- levels/93-warp-portal.lvl
+#
+# The two portal faces are CellKind::Portal: solid to the raycaster (it re-bases
+# the ray through `delta` and shows the destination region) but NOT collidable
+# (the player walks through, and the plane-crossing teleport fires).
+
+[meta]
+name        = 93-warp-portal
+title       = Warp Portal
+
+# A TALL (z=10) and DEEP (y=16) room, matching the Stage-1/2 demo geometry so the
+# authored portal pair lines up exactly with the verified math.
+[room]
+size        = 12 16 10
+ambient     = solid
+
+# ───────────────────────────── SURFACE MATERIALS ────────────────────────────
+# Plain stone perimeter; the portal openings carry an optional spiral skin so the
+# opening reads as a portal rim, not an invisible hole.
+[material hall_stone]
+preset      = stone
+surface     = wall_solid
+
+# ───────────────────────────── WARP PORTAL ──────────────────────────────────
+# One reciprocal pair. region_a = the NORTH wall opening (y=0, x in [1,10],
+# z in [1,8]); region_b = the WEST wall opening (x=0, y in [1,14], z in [1,8]).
+# Both are flat wall faces on the grid boundary and have the same opening shape
+# (8x9 vs 8x14 -> validated by matching the two non-flat spans... see below).
+#
+# NOTE: the two openings must have the SAME in-plane area. The north opening is
+# 9 wide (x:1..10) x 7 tall (z:1..8); the west opening is therefore also sized
+# 9 x 7 (y:1..10, z:1..8) so the link is tear-free.
+#
+# rotate = 0 -> no extra yaw beyond the natural face-to-face frame change (the
+# 90-degree corner turn comes from the differing wall orientations). skin tints
+# the opening rim.
+[portal gate]
+region_a    = (1,0,1)-(10,0,8)
+region_b    = (0,1,1)-(0,10,8)
+rotate      = 0
+skin        = portal_spiral
+
+# ───────────────────────────── MINIMAL PUZZLE (sandbox) ─────────────────────
+# One input -> one output + a switch so the file is a real, loadable, nominally
+# solvable level. Tucked at the spawn end, out of the portal vista.
+[node source]
+pos          = 4,13,2
+glyph        = ◉
+is_input     = yes
+
+[node sink]
+pos          = 7,13,2
+glyph        = O
+is_output    = yes
+threshold    = 1
+
+[pipe source->sink]
+state        = OFF
+path         = (4,13,2) (7,13,2)
+switch_at    = (5,13,2)
+density      = 0.8
+
+[inputs]
+source       = 1
+
+[pedestal]
+center       = 7 13 1
+volume       = 1 1 1
+
+[door]
+pos          = 7 14 1
+target_parts = sink
+
+# Stand at the far SOUTH end looking NORTH (-y): the north-wall portal is dead
+# ahead; walking into it warps you out of the west wall.
+[player]
+spawn        = 6 14 1
+facing       = -y
+
+# A faint cool fog so depth reads through the portal.
+[palette]
+fog_color   = #06121C
+fog_near    = 5.0
+fog_far     = 22.0

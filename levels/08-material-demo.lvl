@@ -1,0 +1,105 @@
+# terminal3d example level — levels/08-material-demo.lvl
+#
+# Material-pipeline fixture (NOT a shipped puzzle). Proves the "color = material
+# KEY" path end-to-end: an authored [material] bound to the floor surface renders
+# with a distinct glyph + fg that visibly differs from the built-in floor_grain.
+#
+# Bound to floor: a fixed-glyph neon-green grain so a `--dump` floor reads as a
+# field of '+' in bright green instead of the built-in faint speckle.
+#
+# NOTE 2026-07-30: this file was round-tripped through ts_editor (which drops `#`
+# comments on save — header restored by hand). The round-trip also added
+# `[effects] matrix = 0.4` (kept, user-authored via the editor).
+
+[meta]
+name = 08-material-demo
+title = Material Demo
+
+[room]
+size = 8,8,4
+ambient = solid
+
+[node in_a]
+pos = 2,2,2
+glyph = A
+color = #FFFFFF
+is_input = yes
+
+[node out]
+pos = 5,2,2
+glyph = O
+color = #FFFFFF
+is_output = yes
+
+[pipe in_a->out]
+state = OFF
+path = (2,2,2) (3,2,2) (4,2,2) (5,2,2)
+color = #FFFFFF
+
+[effects]
+matrix = 0.4
+
+[palette]
+fog_color = #FF00FF
+fog_near = 1
+fog_far = 4
+
+[material floor_neon]
+fg = #20FF80
+bg = #04140C
+glyph = +
+recipe = grain scale=3 speck=0.5 tile_eps=0.08
+surface = floor
+
+[cells]
+size = 8,8,4
+########
+#______#
+#______#
+#______#
+#______#
+#______#
+#______#
+########
+
+########
+#......#
+#......#
+#......#
+#......O
+#......#
+#......#
+########
+
+########
+#......#
+#.O..O.#
+#......#
+#......#
+#......#
+#......#
+########
+
+########
+#^^^^^^#
+#^^^^^^#
+#^^^^^^#
+#^^^^^^#
+#^^^^^^#
+#^^^^^^#
+########
+material_ids =
+5,2,2 = 1
+
+[pedestal]
+center = 5,2,1
+volume = 1,1,1
+
+[door]
+pos = 7,4,1
+target_parts = out
+
+[player]
+spawn = 4,4,1
+facing = 0
+

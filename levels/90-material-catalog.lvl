@@ -1,0 +1,77 @@
+# terminal3d example level — levels/90-material-catalog.lvl
+#
+# A demo room that skins its five surfaces with CATALOG materials via
+# `[material] preset = NAME`. Not a shipped puzzle — a showcase fixture for the
+# smart-materials library (see docs/MATERIALS.md). Render it with:
+#   cargo run -p re_imgqa -- levels/90-material-catalog.lvl
+
+[meta]
+name        = level-90-material-catalog
+title       = Material Catalog
+
+[room]
+size        = 12 12 5
+ambient     = solid
+
+# Skin each surface with a different catalog material, picked BY NAME. A bare
+# `preset = NAME` pulls the whole catalog config (palette, relief, emissive,
+# animation, reflective, stability, underline); explicit keys would override.
+[material walls]
+preset      = rust
+surface     = wall_solid
+
+[material panels]
+preset      = monitor
+surface     = wall_trace
+
+[material screens]
+preset      = neon
+surface     = wall_matrix
+
+[material ground]
+preset      = metal
+surface     = floor
+
+[material roof]
+preset      = void
+surface     = ceiling
+
+[node a]
+pos         = 2 6 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 9 6 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,6,2) (9,6,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 9 6 1
+volume      = 1 1 1
+
+[door]
+pos         = 11 6 1
+target_parts = b
+
+[player]
+spawn       = 5 6 1
+facing      = +x

@@ -1,0 +1,1760 @@
+//! `code_wall` — lay text onto a wall as an addressable monospace grid.
+//!
+//! ## What this module does
+//!
+//! A [`TextPanel`] is a block of text laid out into a fixed monospace grid of
+//! `cols × rows` characters. It is built ONCE, from a `&str`, by
+//! [`TextPanel::build`] (source code) or [`TextPanel::build_wrapped`] (word-wrapped
+//! prose); thereafter it is a read-only table the shader indexes by
+//! `(grid_col, grid_row)`.
+//!
+//! At shade time the [`ascii_shader`](crate::ascii_shader) `CodeWall` / `NoteWall`
+//! recipes ask a panel: "given wall coordinate `(u ∈ tile, v ∈ [0,1])`, which
+//! glyph?" The panel maps `(u, v)` → a `(grid_col, grid_row)` and returns the
+//! character there (and whether it is comment / code / blank, so the shader can
+//! colour comments differently). The mapping is integer indexing into a
+//! pre-flattened `Vec<CodeGlyph>`: **no per-cell heap allocation**, the hot path is
+//! one bounds check and one array read.
+//!
+//! ## Why a grid and not the raw string
+//!
+//! Text has ragged line lengths and tab stops; a wall is a rectangle. So at build
+//! time we normalise: expand tabs, clip/pad every logical line to `cols`, and
+//! stack the lines into `rows`. The result is addressable as a dense grid —
+//! exactly the shape a `(u, v)` surface coordinate wants. The build is the only
+//! place we allocate; after that the panel is immutable and `Sync`.
+//!
+//! ## Engine/content split — the per-level registry
+//!
+//! This module is the generic MECHANISM. It does NOT decide which text appears on
+//! which wall — that is application content. The host builds panels and publishes
+//! them for the level in a [`TextSurfaceRegistry`](crate::scene_text::TextSurfaceRegistry);
+//! the shader resolves a recipe's panel index through that registry. Panels are
+//! OWNED (owned label + owned grid), so a level transition simply replaces the
+//! registry and the previous level's panels are dropped — no `'static` leak.
+//!
+//! ## Legibility constraint
+//!
+//! A terminal cell is one glyph. One wall cell renders one source character. So
+//! the wall is only as legible as the wall is tall+wide in cells. Up close, with
+//! the wall filling the viewport, you can read whole lines. Far away or at a
+//! grazing angle the ranked-LOD coarsens it (legibility yields to not-aliasing) —
+//! the shader keeps the text rank LOW so it survives as long as possible, but a
+//! 3-cell-tall wall slice cannot show a 40-row file. That is a real constraint of
+//! the medium, not a bug.
+
+/// Classification of a single source character on the wall, so the shader can
+/// colour comments differently from executable code and leave structural
+/// whitespace dark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CodeClass {
+    /// Whitespace / off-grid padding — drawn as the near-black wall base.
+    Blank,
+    /// Executable code.
+    Code,
+    /// A comment — tinted distinctly from code by the shader.
+    Comment,
+}
+
+/// One cell of a built panel: the glyph to draw + what kind of source it is.
+/// `Copy` + 8 bytes, so the flattened grid is a flat `Vec` the shader indexes
+/// with zero indirection. (We store the glyph as a `u32` Unicode scalar to match
+/// the framebuffer `Cell::glyph` contract — most source is ASCII, but a stray
+/// box-drawing char in a banner comment survives intact.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CodeGlyph {
+    pub glyph: u32,
+    pub class: CodeClass,
+}
+
+impl CodeGlyph {
+    /// The empty cell: a space classified as blank. Used to pad short lines and
+    /// to fill a grid taller/wider than the source. `pub(crate)` so
+    /// `crate::stencil_variants` has a defined "nothing to show" answer when a bound
+    /// stencil's state has no matching group and no fallback group exists.
+    pub(crate) const BLANK: CodeGlyph = CodeGlyph {
+        glyph: b' ' as u32,
+        class: CodeClass::Blank,
+    };
+}
+
+/// How many spaces a tab expands to when we normalise source into the grid. Four
+/// keeps typical indentation readable without eating the line width.
+const TAB_WIDTH: usize = 4;
+
+/// Per-row layout for a WRAPPED (prose) panel: a fixed line prefix and a cycling
+/// per-row left indent.
+///
+/// The MECHANISM lives here; the note registers that choose the values live in
+/// [`crate::note_style`]. Both fields are `'static` data, so a `LineStyle` is a
+/// `const` — a register's layout is a compile-time table, not a runtime decision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LineStyle {
+    /// Written at the start of every grid row that receives text (e.g. `"> "` for a
+    /// system log). Classified [`CodeClass::Comment`] so the shader can ink the
+    /// structural marker separately from the body. Empty ⇒ no prefix.
+    pub prefix: &'static str,
+    /// Left indent CYCLE: grid row `r` is indented by `indents[r % indents.len()]`
+    /// columns (after the prefix). Empty ⇒ flush left. A pure function of the row,
+    /// so the layout is identical every frame and every run.
+    pub indents: &'static [usize],
+}
+
+impl LineStyle {
+    /// No prefix, no indent — the plain word-wrap layout.
+    pub const FLUSH: LineStyle = LineStyle {
+        prefix: "",
+        indents: &[],
+    };
+
+    /// The left indent for grid row `r` (0 when no cycle is set).
+    #[inline]
+    pub fn indent_for(&self, r: usize) -> usize {
+        if self.indents.is_empty() {
+            0
+        } else {
+            self.indents[r % self.indents.len()]
+        }
+    }
+}
+
+/// A block of text frozen into a fixed `cols × rows` monospace grid.
+///
+/// Built once via [`TextPanel::build`] / [`TextPanel::build_wrapped`] from a
+/// `&str`; thereafter it is a read-only table the shader indexes by
+/// `(grid_col, grid_row)`. The grid is the contract between "ragged text on disk"
+/// and "a rectangle on a wall".
+///
+/// The panel OWNS its label and its grid, so a per-level registry of panels can be
+/// built at load and dropped at teardown. (It was previously handed out as
+/// `&'static`, which forced every panel to be leaked or embedded at compile time —
+/// impossible for per-level note text.)
+#[derive(Debug)]
+pub struct TextPanel {
+    cols: usize,
+    rows: usize,
+    /// Dense row-major grid, `cols * rows` long. `cells[r*cols + c]`.
+    cells: Vec<CodeGlyph>,
+    /// Human label for the panel (the source it came from), for diagnostics/dumps.
+    label: String,
+}
+
+/// Historical name for [`TextPanel`], kept so existing hosts (`re_game`'s code
+/// panels) and tools keep compiling. The type is identical — the panel is no
+/// longer code-specific, since a note placard is the same grid mechanism.
+pub type CodePanel = TextPanel;
+
+impl TextPanel {
+    /// Lay `src` out into a `cols × rows` grid.
+    ///
+    /// Normalisation, in order:
+    /// 1. Split into logical lines on `\n` (stripping a trailing `\r`).
+    /// 2. Expand tabs to [`TAB_WIDTH`] spaces (so indentation aligns on the wall).
+    /// 3. Classify each character: is it inside a `//` line comment, a `/* … */`
+    ///    block comment, or executable code? (A lightweight scanner — it is not a
+    ///    full Rust lexer, but it is honest about the common cases: `//`, `/* */`.
+    ///    It does NOT attempt to track string literals, so a `//` inside a string
+    ///    could in principle mis-tint; that is a colour-only consequence.)
+    /// 4. Clip/pad every line to exactly `cols`, stack the first `rows` lines.
+    ///
+    /// This is the ONLY allocation in the whole code-wall feature. After it
+    /// returns, sampling is allocation-free integer indexing.
+    pub fn build(label: &str, src: &str, cols: usize, rows: usize) -> TextPanel {
+        let mut cells = vec![CodeGlyph::BLANK; cols * rows];
+
+        // Block-comment state persists ACROSS lines (a `/* … */` can span many).
+        let mut in_block_comment = false;
+
+        for (r, raw_line) in src.lines().take(rows).enumerate() {
+            // Per-line scan: expand tabs and classify, writing into the grid.
+            let mut col = 0usize;
+            // Whether we are past a `//` for the REST of this line.
+            let mut in_line_comment = false;
+            let bytes = raw_line.as_bytes();
+            let mut i = 0usize;
+
+            while i < bytes.len() {
+                if col >= cols {
+                    break; // line is wider than the wall — clip the overflow.
+                }
+                let b = bytes[i];
+
+                // Tab → expand to the next TAB_WIDTH stop (as blanks).
+                if b == b'\t' {
+                    let stop = ((col / TAB_WIDTH) + 1) * TAB_WIDTH;
+                    while col < stop.min(cols) {
+                        cells[r * cols + col] = CodeGlyph::BLANK;
+                        col += 1;
+                    }
+                    i += 1;
+                    continue;
+                }
+
+                // Comment-state transitions. We peek the next byte for the
+                // two-character delimiters `//`, `/*`, `*/`.
+                let next = bytes.get(i + 1).copied();
+                if !in_line_comment && !in_block_comment {
+                    if b == b'/' && next == Some(b'/') {
+                        in_line_comment = true;
+                    } else if b == b'/' && next == Some(b'*') {
+                        in_block_comment = true;
+                    }
+                }
+                // A `*/` close is handled below, AFTER both its chars are placed —
+                // the `*/` itself stays classified as comment.
+
+                let class = if in_line_comment || in_block_comment {
+                    CodeClass::Comment
+                } else if b == b' ' {
+                    CodeClass::Blank
+                } else {
+                    CodeClass::Code
+                };
+
+                // The glyph: keep ASCII as-is; for a multi-byte UTF-8 start byte,
+                // decode the full scalar so box-drawing banner chars survive.
+                let (glyph, advance) = decode_scalar(bytes, i);
+                cells[r * cols + col] = CodeGlyph {
+                    glyph,
+                    class,
+                };
+                col += 1;
+
+                // Close a block comment once we have consumed its `*/`.
+                if in_block_comment && b == b'*' && next == Some(b'/') {
+                    // place the '/' too, then exit block-comment.
+                    if col < cols {
+                        cells[r * cols + col] = CodeGlyph {
+                            glyph: b'/' as u32,
+                            class: CodeClass::Comment,
+                        };
+                        col += 1;
+                    }
+                    in_block_comment = false;
+                    i += 2; // consumed '*' and '/'
+                    continue;
+                }
+
+                i += advance;
+            }
+            // Remaining columns stay BLANK (already initialised).
+        }
+
+        TextPanel {
+            cols,
+            rows,
+            cells,
+            label: label.to_string(),
+        }
+    }
+
+    /// Lay `text` out into a `cols × rows` grid **verbatim** — line for line,
+    /// column for column, with NO word wrapping and NO comment scanning.
+    ///
+    /// This is the layout a hand-drawn ASCII DECAL needs: a stencilled wall plate
+    /// whose frame is drawn out of `+ - | :` characters is destroyed the moment a
+    /// line is re-flowed, because its meaning is its *geometry*, not its words. So
+    /// where [`build_wrapped`](Self::build_wrapped) treats a line break as a soft
+    /// hint and [`build`](Self::build) additionally tints `//` runs as comments,
+    /// this builder does exactly one thing: it copies the authored grid onto the
+    /// wall.
+    ///
+    /// Differences from [`build`](Self::build), all deliberate:
+    ///
+    /// * **No comment scanner.** A decal is not source; a `//` in a stencil is two
+    ///   slashes, not a comment. Every non-space character is [`CodeClass::Code`].
+    /// * **Character-based, not byte-based.** Decal frames legitimately use
+    ///   box-drawing glyphs (`│ ─ ┌ ┐`), which are multi-byte. Advancing by `char`
+    ///   keeps one glyph in one grid cell; the byte scanner in `build` would split
+    ///   them across cells.
+    ///
+    /// Shared with [`build`](Self::build): tabs expand to [`TAB_WIDTH`] stops, a
+    /// line wider than `cols` is clipped, short lines are blank-padded, and rows
+    /// past `rows` are dropped.
+    pub fn build_verbatim(label: &str, text: &str, cols: usize, rows: usize) -> TextPanel {
+        let mut cells = vec![CodeGlyph::BLANK; cols * rows];
+        if cols == 0 || rows == 0 {
+            return TextPanel {
+                cols,
+                rows,
+                cells,
+                label: label.to_string(),
+            };
+        }
+
+        for (r, raw_line) in text.lines().take(rows).enumerate() {
+            let mut col = 0usize;
+            for ch in raw_line.chars() {
+                if col >= cols {
+                    break; // wider than the plate — clip the overflow.
+                }
+                if ch == '\t' {
+                    let stop = ((col / TAB_WIDTH) + 1) * TAB_WIDTH;
+                    while col < stop.min(cols) {
+                        cells[r * cols + col] = CodeGlyph::BLANK;
+                        col += 1;
+                    }
+                    continue;
+                }
+                // A space stays BLANK-classified so the shader inks it as plate,
+                // not as ink — exactly as the other builders treat whitespace.
+                cells[r * cols + col] = if ch.is_whitespace() {
+                    CodeGlyph::BLANK
+                } else {
+                    CodeGlyph {
+                        glyph: ch as u32,
+                        class: CodeClass::Code,
+                    }
+                };
+                col += 1;
+            }
+            // Remaining columns stay BLANK (already initialised).
+        }
+
+        TextPanel {
+            cols,
+            rows,
+            cells,
+            label: label.to_string(),
+        }
+    }
+
+    /// Build a panel directly from a pre-rasterised `cells` grid (`cols × rows`,
+    /// row-major) — the seam a PIXEL renderer (the [`crate::banner`] bitmap font) uses
+    /// instead of laying out characters from a `&str`. `cells.len()` must equal
+    /// `cols * rows`; a mismatched buffer is padded with [`CodeGlyph::BLANK`] / clipped
+    /// rather than panicking, so a caller's rounding error degrades gracefully.
+    pub(crate) fn from_cells(label: &str, cols: usize, rows: usize, mut cells: Vec<CodeGlyph>) -> TextPanel {
+        cells.resize(cols * rows, CodeGlyph::BLANK);
+        TextPanel {
+            cols,
+            rows,
+            cells,
+            label: label.to_string(),
+        }
+    }
+
+    /// Reclassify every [`CodeClass::Code`] cell whose glyph is in `accent` to
+    /// [`CodeClass::Comment`], in place. Used by a stencil's authored `colors =
+    /// GLYPH:#hex …` key ([`crate::stencil_variants`]): the shader already inks
+    /// `Comment` cells with the register's `mark_fg` rather than `fg`
+    /// ([`crate::note_style`]), so a glyph named in the key reads in a second, distinct
+    /// ink — the two-channel approximation of a full per-glyph colour table (see the
+    /// module docs of `stencil_variants` for why it is not a full table).
+    ///
+    /// `Blank` cells are untouched (there is no ink to retint), and an EMPTY `accent`
+    /// slice is a no-op — a stencil with no `colors =` key is unaffected. O(cols·rows),
+    /// called once per panel at registration.
+    pub(crate) fn reclass_accent(&mut self, accent: &[char]) {
+        if accent.is_empty() {
+            return;
+        }
+        for cell in &mut self.cells {
+            if cell.class == CodeClass::Code {
+                if let Some(ch) = char::from_u32(cell.glyph) {
+                    if accent.contains(&ch) {
+                        cell.class = CodeClass::Comment;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Lay `text` out into a `cols × rows` grid with WORD WRAPPING — the prose
+    /// counterpart of [`build`](Self::build).
+    ///
+    /// Source code is laid out line-for-line because its line breaks are
+    /// meaningful and its lines are already short. Authored prose (a `[note]`
+    /// body) is the opposite: the lines are as long as the author's editor was
+    /// wide, and a wall face is ~24 characters. So here every logical line is
+    /// re-flowed to `cols`, breaking on whitespace, and a BLANK authored line is
+    /// preserved as a blank grid row (paragraph breaks carry meaning in a note).
+    ///
+    /// A single word longer than `cols` is hard-broken rather than dropped —
+    /// truncating it would silently lose text.
+    ///
+    /// Classification: every character is [`CodeClass::Code`] except whitespace
+    /// ([`CodeClass::Blank`]); prose has no `//` comments, and the note recipe
+    /// styles by note register, not by class. Rows past `rows` are dropped (the
+    /// panel physically cannot show them).
+    pub fn build_wrapped(label: &str, text: &str, cols: usize, rows: usize) -> TextPanel {
+        TextPanel::build_wrapped_styled(label, text, cols, rows, &LineStyle::FLUSH)
+    }
+
+    /// [`build_wrapped`](Self::build_wrapped) with a per-row [`LineStyle`]: a fixed
+    /// line PREFIX and/or a per-row left INDENT.
+    ///
+    /// This is the layout half of the note REGISTER styling
+    /// ([`crate::note_style`]): a `system_log` placard prefixes every wrapped line
+    /// with `>` and a `researcher` placard walks a small indent cycle so its left
+    /// margin is ragged like a hand-written note. Both are baked into the grid HERE,
+    /// once, at registration — the shader still does one integer index per cell and
+    /// knows nothing about registers.
+    ///
+    /// Wrapping accounts for the style: a row's usable width is `cols - prefix -
+    /// indent(row)`, so a prefixed/indented line wraps earlier rather than clipping.
+    /// The prefix glyphs are classified [`CodeClass::Comment`] (they are structure,
+    /// not the author's words) so the shader can ink them distinctly from the body.
+    /// [`LineStyle::FLUSH`] reproduces plain [`build_wrapped`](Self::build_wrapped)
+    /// exactly.
+    pub fn build_wrapped_styled(
+        label: &str,
+        text: &str,
+        cols: usize,
+        rows: usize,
+        style: &LineStyle,
+    ) -> TextPanel {
+        let mut cells = vec![CodeGlyph::BLANK; cols * rows];
+        if cols == 0 || rows == 0 {
+            return TextPanel {
+                cols,
+                rows,
+                cells,
+                label: label.to_string(),
+            };
+        }
+        // Open grid row `r`: stamp the style's prefix and return the column the
+        // body starts at. Called once per grid row that receives text (a blank
+        // paragraph row is NOT opened, so it stays truly blank).
+        let open_row = |cells: &mut Vec<CodeGlyph>, r: usize| -> usize {
+            let indent = style.indent_for(r);
+            let mut col = indent.min(cols.saturating_sub(1));
+            for ch in style.prefix.chars() {
+                if col >= cols {
+                    break;
+                }
+                cells[r * cols + col] = CodeGlyph {
+                    glyph: ch as u32,
+                    class: CodeClass::Comment,
+                };
+                col += 1;
+            }
+            // Always leave at least one usable body column, even for a pathological
+            // prefix/indent wider than the grid.
+            col.min(cols - 1)
+        };
+
+        let mut r = 0usize;
+        for raw_line in text.lines() {
+            if r >= rows {
+                break;
+            }
+            let line = raw_line.trim_end();
+            if line.trim().is_empty() {
+                r += 1; // preserve the paragraph break
+                continue;
+            }
+            // `left` is this row's body start (after prefix + indent); `col` is the
+            // next write column. The row is opened lazily, on its first word.
+            let mut left = 0usize;
+            let mut col = 0usize;
+            let mut opened = false;
+            for word in line.split_whitespace() {
+                if r >= rows {
+                    break;
+                }
+                if !opened {
+                    left = open_row(&mut cells, r);
+                    col = left;
+                    opened = true;
+                }
+                let wlen = word.chars().count();
+                // Wrap before a word that does not fit (unless we are at the row's
+                // body start, in which case it is hard-broken below).
+                if col > left && col + 1 + wlen > cols {
+                    r += 1;
+                    if r >= rows {
+                        break;
+                    }
+                    left = open_row(&mut cells, r);
+                    col = left;
+                } else if col > left {
+                    // Inter-word space: the cell is already BLANK, so just advance.
+                    col += 1;
+                }
+                for ch in word.chars() {
+                    if col >= cols {
+                        // Hard-break an over-long word onto the next row.
+                        r += 1;
+                        if r >= rows {
+                            break;
+                        }
+                        left = open_row(&mut cells, r);
+                        col = left;
+                    }
+                    cells[r * cols + col] = CodeGlyph {
+                        glyph: ch as u32,
+                        class: CodeClass::Code,
+                    };
+                    col += 1;
+                }
+            }
+            r += 1;
+        }
+        TextPanel {
+            cols,
+            rows,
+            cells,
+            label: label.to_string(),
+        }
+    }
+
+    /// Grid width in characters.
+    #[inline]
+    pub fn cols(&self) -> usize {
+        self.cols
+    }
+
+    /// Grid height in characters.
+    #[inline]
+    pub fn rows(&self) -> usize {
+        self.rows
+    }
+
+    /// The panel's source label.
+    #[inline]
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// The number of grid rows that carry at least one non-blank glyph, counted
+    /// from the top. A note placard is usually far shorter than its grid, and the
+    /// note recipe maps only the USED rows across the wall face so a 3-line note
+    /// fills the plate instead of hiding in the top eighth of it.
+    ///
+    /// O(cols × rows) — called once per panel at registration, never per cell.
+    pub fn used_rows(&self) -> usize {
+        let mut last = 0usize;
+        for r in 0..self.rows {
+            let inked = (0..self.cols).any(|c| self.cells[r * self.cols + c].class != CodeClass::Blank);
+            if inked {
+                last = r + 1;
+            }
+        }
+        last
+    }
+
+    /// Read the grid cell at integer `(grid_col, grid_row)`. Out-of-range returns
+    /// the blank cell, so a wall slice larger than the grid simply runs out of
+    /// text (it does not wrap or panic). Allocation-free; this is the hot path.
+    #[inline]
+    pub fn cell(&self, grid_col: usize, grid_row: usize) -> CodeGlyph {
+        if grid_col < self.cols && grid_row < self.rows {
+            self.cells[grid_row * self.cols + grid_col]
+        } else {
+            CodeGlyph::BLANK
+        }
+    }
+
+    /// THE MAPPING the shader calls. Given a wall surface coordinate
+    /// `(u, v)` — `u` is the horizontal crossing along the wall face (the
+    /// raycaster's `tex_u`, possibly with an integer face offset so adjacent wall
+    /// cells continue the text rather than restarting it), `v ∈ [0,1]` is the
+    /// vertical position down the visible wall slice (0 = top, 1 = bottom) — pick
+    /// the source character that lives there.
+    ///
+    /// `u` is scaled by `u_chars_per_unit` so a host can tune how many source
+    /// columns span one world cell of wall (legibility vs. how much code fits).
+    /// `v` spans the WHOLE grid height across one wall slice, so a full file is
+    /// visible top-to-bottom on a face-on wall.
+    ///
+    /// Returns the [`CodeGlyph`] (glyph + class). Pure: same `(u, v)` → same glyph,
+    /// every frame — golden-test safe, and exactly why the wall is stable enough
+    /// to read.
+    #[inline]
+    pub fn sample(&self, u: f32, v: f32, u_chars_per_unit: f32) -> CodeGlyph {
+        // Horizontal: u runs along the face; scale it to source columns. We take
+        // the fractional-tile u and the integer face offset together (the caller
+        // folds the face offset into u), so text flows across a flat wall.
+        let gc = (u * u_chars_per_unit).floor();
+        // Vertical: v in [0,1] maps across the full grid height.
+        let gr = (v.clamp(0.0, 1.0) * self.rows as f32).floor();
+        if gc < 0.0 || gr < 0.0 {
+            return CodeGlyph::BLANK;
+        }
+        self.cell(gc as usize, gr as usize)
+    }
+
+    /// THE FLOWING MAPPING: lay the source as ONE continuous text plane along a wall
+    /// run, at a screen-matched density (see the [`FlowScale`] section notes).
+    ///
+    /// `run_u` is the continuous, world-anchored coordinate along the run
+    /// ([`crate::face_span::wall_run`]); `wall_v ∈ [0,1]` is the position down the
+    /// one-cell-tall wall slice. Returns the glyph plus the SOURCE ROW it came from,
+    /// which the recipe needs for its world-anchored CRT scanline parity.
+    ///
+    /// The column index WRAPS modulo the grid width: the density adapts with distance,
+    /// so at close range the panel's 100 columns span only a fraction of a world cell,
+    /// and without a wrap the rest of the wall would go blank. Wrapping tiles the source
+    /// along the run, which is what "the walls are the source" wants anyway.
+    #[inline]
+    pub fn sample_flowing(&self, run_u: f32, wall_v: f32, s: FlowScale) -> (CodeGlyph, i64) {
+        if self.cols == 0 || self.rows == 0 {
+            return (CodeGlyph::BLANK, 0);
+        }
+        let v = wall_v.clamp(0.0, 1.0);
+        // Vertical de-duplication is ALWAYS safe: `wall_v` is `(row − slice_top)/span`,
+        // so screen rows tile the slice exactly and no resample sits in between.
+        let Some(gr) = flowed_index(v, s.source_rows_per_cell, s.screen_rows_per_cell, true)
+        else {
+            return (CodeGlyph::BLANK, 0);
+        };
+        let row = (gr.max(0) as usize).min(self.rows - 1);
+        let Some(gc) = flowed_index(
+            run_u,
+            s.source_cols_per_unit,
+            s.screen_cols_per_unit,
+            s.dedup_columns,
+        ) else {
+            return (CodeGlyph::BLANK, gr);
+        };
+        let col = gc.rem_euclid(self.cols as i64) as usize;
+        (self.cell(col, row), gr)
+    }
+
+    /// [`sample_flowing`](Self::sample_flowing) for a face whose exact screen extent is
+    /// known — JUSTIFIED, so a magnified face never splits its words.
+    ///
+    /// ## Why
+    ///
+    /// The density is octave-quantized (so the text does not re-flow on every step the
+    /// player takes), which leaves a face up to √2 screen columns per source character.
+    /// The flowing rule then blanks every screen column that does not own a character's
+    /// centre, and those blanks land INSIDE words wherever they fall: `Stewa rdship`,
+    /// `ra ti fied by` (observed on L11's monolith).
+    ///
+    /// ## The rule
+    ///
+    /// Face `k` of the run (`run_u ∈ [k, k+1)`) carries exactly the characters
+    /// `floor(k·d) .. floor((k+1)·d)` — the same set the flowing mapping gives it, so the
+    /// stream is still continuous from face to face and still world-anchored. When the
+    /// face covers more screen columns than it has characters, each character takes one
+    /// column and the surplus columns widen the SPACES of this face's segment, spread
+    /// evenly, like justified type; a segment with no space puts the surplus after its
+    /// last character. `u_cols` / `span_cols` are the face anchor
+    /// ([`crate::face_span::FaceAnchor`]). A face with no surplus, a resampled cast
+    /// (`dedup_columns == false`) or an unusable anchor falls back to
+    /// [`sample_flowing`](Self::sample_flowing) unchanged.
+    #[inline]
+    pub fn sample_flowing_justified(
+        &self,
+        run_u: f32,
+        wall_v: f32,
+        s: FlowScale,
+        u_cols: f32,
+        span_cols: f32,
+    ) -> (CodeGlyph, i64) {
+        let fallback = || self.sample_flowing(run_u, wall_v, s);
+        if self.cols == 0 || self.rows == 0 || !s.dedup_columns {
+            return fallback();
+        }
+        let d = s.source_cols_per_unit;
+        if !(run_u.is_finite() && u_cols.is_finite() && span_cols.is_finite() && d.is_finite())
+            || d <= 0.0
+            || span_cols < 1.0
+        {
+            return fallback();
+        }
+        let k = run_u.floor();
+        let (start, end) = ((k * d).floor(), ((k + 1.0) * d).floor());
+        if !(start.abs() < MAX_FLOW_INDEX && end.abs() < MAX_FLOW_INDEX) {
+            return fallback();
+        }
+        let (start, n) = (start as i64, (end - start) as i64);
+        let w = span_cols.round() as i64;
+        if n <= 0 || w <= n || n > JUSTIFY_MAX_SEGMENT {
+            return fallback();
+        }
+        let v = wall_v.clamp(0.0, 1.0);
+        let Some(gr) = flowed_index(v, s.source_rows_per_cell, s.screen_rows_per_cell, true)
+        else {
+            return (CodeGlyph::BLANK, 0);
+        };
+        let row = (gr.max(0) as usize).min(self.rows - 1);
+        let glyph_of = |i: i64| self.cell((start + i).rem_euclid(self.cols as i64) as usize, row);
+        let is_space = |c: CodeGlyph| c.class == CodeClass::Blank || c.glyph == u32::from(b' ');
+        let spaces = (0..n).filter(|&i| is_space(glyph_of(i))).count() as i64;
+        let extra = w - n;
+        let j = (u_cols.floor() as i64).clamp(0, w - 1);
+        let mut pos = 0i64;
+        let mut m = 0i64;
+        for i in 0..n {
+            let c = glyph_of(i);
+            let mut width = 1;
+            if spaces > 0 && is_space(c) {
+                width += (m + 1) * extra / spaces - m * extra / spaces;
+                m += 1;
+            }
+            if j < pos + width {
+                return (c, gr);
+            }
+            pos += width;
+        }
+        (CodeGlyph::BLANK, gr)
+    }
+
+    /// THE OTHER MAPPING: fit the panel's whole width and its first `rows_used`
+    /// rows across a UNIT face — `(u, v) ∈ [0,1]²` — instead of flowing it across
+    /// many world cells.
+    ///
+    /// This is what a PLACARD wants: one wall cell, one text block, the whole block
+    /// visible on that one face. (The code wall wants the other mapping: text
+    /// flowing continuously across a long wall run at an authored character
+    /// density.) `rows_used` lets a 3-line note fill the plate rather than occupying
+    /// the top 3/600ths of it; `0` falls back to the full grid height.
+    ///
+    /// Out-of-range `(u, v)` clamps into the grid, so a caller that hands a
+    /// fractional coordinate slightly outside the face never reads garbage.
+    #[inline]
+    pub fn sample_fitted(&self, u: f32, v: f32, rows_used: usize) -> CodeGlyph {
+        // Span unknown ⇒ the plain stretch mapping (see `sample_fitted_clamped`).
+        self.sample_fitted_clamped(u, v, rows_used, 0.0)
+    }
+
+    /// [`sample_fitted`](Self::sample_fitted) told HOW WIDE the face is on screen —
+    /// which lets it refuse to magnify.
+    ///
+    /// ## Why a span is needed at all
+    ///
+    /// The plain fitted mapping stretches the panel's `cols` characters across
+    /// whatever the face happens to occupy. Up close a placard's face covers far more
+    /// terminal columns than the panel is wide, and nearest-neighbour stretch then
+    /// REPLICATES source characters — `read me` renders as `rreeaadd mmee`, a row of
+    /// `(` becomes `((((`. It is unreadable, and it stutters as the player walks
+    /// (the replication pattern shifts cell by cell).
+    ///
+    /// ## The clamp
+    ///
+    /// When `face_cols` exceeds the grid width, the panel is drawn at INTEGER 1:1
+    /// scale — one source character per terminal column — CENTRED on the face, with
+    /// the surrounding margin left blank (the register's plate ink). Text at 1:1 is
+    /// exactly as legible as the terminal can be, and a 1-cell camera step moves the
+    /// block by a whole column instead of re-dealing which characters get doubled.
+    ///
+    /// `face_cols <= 0.0` (or not finite) means "span unknown" and selects the plain
+    /// stretch mapping, so [`sample_fitted`](Self::sample_fitted) — and every caller
+    /// that cannot measure the face — is BYTE-IDENTICAL to before this existed.
+    /// A face NARROWER than the grid also keeps the stretch mapping: minification is
+    /// the LOD's business (dropping characters), not this clamp's.
+    ///
+    /// Pure, allocation-free, branch-light: two multiplies and a compare more than
+    /// the plain path in the clamped case.
+    #[inline]
+    pub fn sample_fitted_clamped(
+        &self,
+        u: f32,
+        v: f32,
+        rows_used: usize,
+        face_cols: f32,
+    ) -> CodeGlyph {
+        // Row span unknown ⇒ vertical stretch, exactly as before this took a row span.
+        self.sample_fitted_clamped_2d(u, v, rows_used, face_cols, 0.0)
+    }
+
+    /// [`sample_fitted_clamped`](Self::sample_fitted_clamped) with the face's ROW span
+    /// too, so the refuse-to-magnify rule applies on BOTH axes.
+    ///
+    /// A placard's `rows_used` source lines stretched down a 15-row wall slice renders
+    /// every line two or three times over — the vertical twin of the `thhe latttice`
+    /// artifact, and just as unreadable. Given `face_rows` (screen rows the face spans)
+    /// the block is drawn one source line per terminal row, vertically centred, with the
+    /// plate blank above and below.
+    ///
+    /// ## Both spans stay CONTINUOUS
+    ///
+    /// See [`integer_scale_index`] — quantizing either span to whole cells re-introduces
+    /// the very doubling this removes. The measured span is used as-is; column-centre
+    /// sampling gives the mapping a half-cell of slack, which is what makes an
+    /// approximate span safe.
+    ///
+    /// Either span `<= 0.0` / non-finite means "unknown" for that axis and keeps that
+    /// axis's historical stretch mapping — so [`sample_fitted`](Self::sample_fitted) and
+    /// every caller that cannot measure the face is BYTE-IDENTICAL to before.
+    #[inline]
+    pub fn sample_fitted_clamped_2d(
+        &self,
+        u: f32,
+        v: f32,
+        rows_used: usize,
+        face_cols: f32,
+        face_rows: f32,
+    ) -> CodeGlyph {
+        self.sample_fitted_anchored_2d(
+            u,
+            v,
+            rows_used,
+            crate::face_span::FaceAnchor::estimated(u.clamp(0.0, 1.0), face_cols),
+            face_rows,
+        )
+    }
+
+    /// [`sample_fitted_clamped_2d`](Self::sample_fitted_clamped_2d) with the horizontal
+    /// placement given as a MEASURED [`FaceAnchor`](crate::face_span::FaceAnchor)
+    /// instead of the `u · face_cols` estimate.
+    ///
+    /// This is the D2 correction. `u · face_cols` evaluates the projection at the
+    /// shaded cell's own perpendicular depth, which is constant across a face-on wall
+    /// (hence "clean at 90°") but VARIES across an oblique one — so the product drifts,
+    /// and half a cell of drift is a repeated source column plus a dropped one. A
+    /// measured anchor carries the screen offset from the face's projected `u = 0`
+    /// edge, which advances by exactly one per screen column at ANY yaw. `u` is still
+    /// taken for the unclamped (stretch / minified) fallback, which is a genuine
+    /// texture-space mapping.
+    #[inline]
+    pub fn sample_fitted_anchored_2d(
+        &self,
+        u: f32,
+        v: f32,
+        rows_used: usize,
+        anchor: crate::face_span::FaceAnchor,
+        face_rows: f32,
+    ) -> CodeGlyph {
+        let rows = if rows_used == 0 || rows_used > self.rows {
+            self.rows
+        } else {
+            rows_used
+        };
+        if self.cols == 0 || rows == 0 {
+            return CodeGlyph::BLANK;
+        }
+        let vc = v.clamp(0.0, 1.0);
+        let uc = u.clamp(0.0, 1.0);
+
+        // ── VERTICAL: 1:1 when the face is taller than the block, else stretch ──
+        // No anchor needed here: the caster's `wall_v` is `(row − slice_top)/slice_span`
+        // and `face_rows` reproduces that same drawn span EXACTLY, so `v · face_rows`
+        // already IS the integer screen-row offset. Only the horizontal axis carries a
+        // perspective term, which is why only it needed anchoring.
+        let gr = match integer_scale_index(vc, face_rows, rows) {
+            SpanIndex::Clamped(Some(i)) => i,
+            SpanIndex::Clamped(None) => return CodeGlyph::BLANK, // plate above/below
+            SpanIndex::Stretch => (vc * rows as f32).floor() as usize,
+        };
+        // ── HORIZONTAL: same refuse-to-magnify rule, off the measured anchor ──
+        let gc = match anchored_scale_index(anchor, self.cols) {
+            SpanIndex::Clamped(Some(i)) => i,
+            SpanIndex::Clamped(None) => return CodeGlyph::BLANK, // plate left/right
+            SpanIndex::Stretch => (uc * self.cols as f32).floor() as usize,
+        };
+        self.cell(gc.min(self.cols - 1), gr.min(rows - 1))
+    }
+}
+
+/// What [`integer_scale_index`] decided for one axis.
+enum SpanIndex {
+    /// The clamp engaged: `Some(i)` is the source index, `None` is the blank plate
+    /// margin outside the centred 1:1 block.
+    Clamped(Option<usize>),
+    /// No span, or the face is not wider/taller than the block: keep the axis's
+    /// historical stretch mapping.
+    Stretch,
+}
+
+/// Absorbs float wobble in the `t · span` product. The ROW axis lands exactly ON a
+/// bucket boundary (`v` is `k/span` from the caster's own integer slice), so a downward
+/// rounding error of one ULP would drop the sample a whole row without this.
+const SPAN_EPS: f32 = 1.0 / 1024.0;
+
+/// One axis of the refuse-to-magnify rule: given a normalised coordinate `t ∈ [0,1]`
+/// across the face, the face's screen `span` on that axis, and the block's `extent` in
+/// source cells, return the source index at 1:1 scale, centred on the face.
+///
+/// ## Why nothing here is rounded to an integer
+///
+/// The temptation is to quantize `span` (or the centring offset) to whole cells — and it
+/// is a TRAP, verified against a real frame. `span` is measured from the projection and
+/// varies slightly ACROSS one face (the per-column grazing angle moves it by a few
+/// tenths). Quantizing turns that smooth wobble into a STEP in the middle of the face:
+/// every cell past the step shifts by one source column, which is precisely the doubled
+/// letter (`nott`) plus a dropped one (`fae`) that this clamp exists to remove.
+///
+/// Left continuous, the mapping is self-correcting: the caster samples cell CENTRES, so
+/// `t · span` lands mid-bucket (`k + δ`, `δ` constant along the face), and `floor`
+/// returns the same `k` for any span estimate within ±½ cell over the whole face —
+/// far more slack than the projection wobble needs. Verified: 30 consecutive columns of
+/// a placard face map to source columns 0…29 with no repeat and no skip.
+///
+/// A `span` that is not finite, `<= 0`, or no larger than `extent` yields
+/// [`SpanIndex::Stretch`] — minification is the LOD's business, not this clamp's.
+/// The HORIZONTAL half of the refuse-to-magnify rule, driven by a MEASURED
+/// [`FaceAnchor`](crate::face_span::FaceAnchor).
+///
+/// Identical arithmetic to [`integer_scale_index`] — centre the `extent`-wide block in
+/// the face's `span` and take the floor — except that the screen offset is the
+/// anchor's own `u_cols` rather than the reconstructed `t · span`. Because `u_cols` is
+/// the projected distance from the face's `u = 0` edge, it advances by EXACTLY one per
+/// screen column, so `idx` does too: no two columns can share a source column and none
+/// can be skipped, at any face orientation.
+///
+/// An unknown anchor, or a face no wider than the block, yields
+/// [`SpanIndex::Stretch`] — minification stays the LOD's business.
+#[inline]
+fn anchored_scale_index(anchor: crate::face_span::FaceAnchor, extent: usize) -> SpanIndex {
+    if !anchor.is_known() || anchor.span_cols <= extent as f32 {
+        return SpanIndex::Stretch;
+    }
+    let idx = (anchor.u_cols - (anchor.span_cols - extent as f32) * 0.5 + SPAN_EPS).floor();
+    if idx < 0.0 || idx >= extent as f32 {
+        return SpanIndex::Clamped(None);
+    }
+    SpanIndex::Clamped(Some(idx as usize))
+}
+
+#[inline]
+fn integer_scale_index(t: f32, span: f32, extent: usize) -> SpanIndex {
+    if !span.is_finite() || span <= extent as f32 {
+        return SpanIndex::Stretch;
+    }
+    // Screen cell of the face, minus where the centred block starts: `(span-extent)/2`
+    // blank cells of plate on each side, kept CONTINUOUS (see above).
+    let idx = (t * span - (span - extent as f32) * 0.5 + SPAN_EPS).floor();
+    if idx < 0.0 || idx >= extent as f32 {
+        return SpanIndex::Clamped(None);
+    }
+    SpanIndex::Clamped(Some(idx as usize))
+}
+
+/// Decode the Unicode scalar starting at `bytes[i]`, returning `(scalar, n_bytes)`.
+/// ASCII (the overwhelming majority of source) is the fast path: one byte, return
+/// it. For a UTF-8 lead byte we decode the whole scalar so a box-drawing glyph in
+/// a banner comment renders as itself rather than as mojibake on the wall. A
+/// malformed sequence degrades to U+FFFD and advances one byte (never loops).
+#[inline]
+fn decode_scalar(bytes: &[u8], i: usize) -> (u32, usize) {
+    let b = bytes[i];
+    if b < 0x80 {
+        return (b as u32, 1);
+    }
+    // Determine the expected length from the lead byte.
+    let len = if b >= 0xF0 {
+        4
+    } else if b >= 0xE0 {
+        3
+    } else if b >= 0xC0 {
+        2
+    } else {
+        return (0xFFFD, 1); // stray continuation byte
+    };
+    if i + len > bytes.len() {
+        return (0xFFFD, 1);
+    }
+    match std::str::from_utf8(&bytes[i..i + len]) {
+        Ok(s) => match s.chars().next() {
+            Some(c) => (c as u32, len),
+            None => (0xFFFD, 1),
+        },
+        Err(_) => (0xFFFD, 1),
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Panel geometry constants — the engine/content seam is `crate::scene_text`
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// The grid size every CODE panel is normalised to. Wide enough for typical source
+/// lines, tall enough for a meaningful excerpt; the shader maps a wall slice
+/// across it. A wall taller than `PANEL_ROWS` cells shows blank past the source;
+/// a wall shorter shows the top of the grid — legibility scales with wall size.
+pub const PANEL_COLS: usize = 100;
+/// Tall enough to hold an entire embedded source file (a few hundred lines), so
+/// the WHOLE file lives on the grid and can land on a wall. A wall slice only
+/// shows as many rows as it is cells tall, but the panel must *contain* the line
+/// for it to ever be shown.
+pub const PANEL_ROWS: usize = 600;
+
+/// Grid WIDTH of a `[note]` placard panel, in characters.
+///
+/// A placard occupies ONE wall cell face, and a wall cell at readable distance
+/// spans roughly 20–30 terminal columns — so the grid is sized to the medium, not
+/// to the author's editor width. Prose is re-flowed to this width by
+/// [`TextPanel::build_wrapped`]. Wider would fit more words per line and render
+/// them sub-cell (illegible); narrower would waste the plate.
+pub const NOTE_COLS: usize = 26;
+/// Grid HEIGHT of a `[note]` placard panel, in rows. Deep enough for the longest
+/// shipped placard once wrapped to [`NOTE_COLS`] (the longest is ~4 authored lines
+/// ≈ 14 wrapped rows) with headroom; the recipe maps only the USED rows across the
+/// face ([`TextPanel::used_rows`]), so an unused tail costs nothing visually.
+pub const NOTE_ROWS: usize = 24;
+
+// ────────────────── the code wall's FLOWING 1:1 text plane ──────────────────
+//
+// The placard clamp above fits ONE block onto ONE face. The code wall is the other
+// shape: one continuous source stream along a whole wall RUN. Three separate defects
+// made it unreadable, and they share one fix.
+//
+//  1. NO FLOW. The recipe addressed the panel by `coord.x`, whose fractional part is
+//     `tex_u` — which WRAPS every world cell. So every cell of a run showed the SAME
+//     `u_chars_per_unit` source columns, over and over. It is fixed by addressing the
+//     panel with the continuous wall-RUN coordinate instead
+//     ([`crate::face_span::set_wall_run`]).
+//  2. HORIZONTAL MAGNIFICATION. A fixed authored density (8 source columns per world
+//     cell) against a face that covers 10 screen columns far away and 300 up close
+//     means each character is nearest-neighbour REPLICATED 1× … 40×. Measured on the
+//     shipped dump: 50 identical columns per character while standing at a wall.
+//  3. VERTICAL MINIFICATION. `wall_v ∈ [0,1]` mapped the panel's whole 600-row height
+//     across ONE world cell of wall, so ~15 source lines collapsed into each screen
+//     row: consecutive rows showed unrelated lines of the file.
+//
+// The fix for (2) and (3) is one idea applied to both axes: choose the text DENSITY to
+// match what the screen can actually resolve, quantized to OCTAVES of the authored
+// base so it is stable and world-anchored rather than sliding with every step. The
+// wall then reads at roughly 1:1 — one source character per terminal cell — at any
+// distance, and leaning in shows MORE of the file rather than fatter letters.
+//
+// Octaves (not a continuous fit, not integer steps) because the density must be
+// CONSTANT across a face: the local screen span varies across an oblique wall, and a
+// finer quantization would step mid-face and shear the text. An octave band is wide
+// enough that a whole face sits inside one.
+
+/// Source LINES laid across one world cell of wall height at the base octave. The
+/// octave search scales up or down from here to match the wall slice's drawn height,
+/// so this only sets the phase of the bands — a value near a typical slice height
+/// keeps the common reading distances near 1:1.
+pub const CODE_V_LINES_PER_UNIT: f32 = 12.0;
+
+/// How many octaves the adaptive density may travel from its base, each way. Bounds
+/// both the density (so a grazing face cannot ask for a million characters per cell)
+/// and the `2^k` exponent arithmetic.
+const CODE_FLOW_OCTAVE_CAP: i32 = 6;
+
+/// The code wall's text scale for one shaded cell: how dense the source is laid on the
+/// wall, and how much screen the wall covers there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlowScale {
+    /// Source COLUMNS per world unit along the run (octave-quantized).
+    pub source_cols_per_unit: f32,
+    /// Screen COLUMNS per world unit along the run AT THIS CELL — the local derivative
+    /// of the projection, which is exactly the width of one screen cell's world
+    /// footprint. Drives the de-duplication test, not the density.
+    pub screen_cols_per_unit: f32,
+    /// Source ROWS across one world cell of wall height (octave-quantized).
+    pub source_rows_per_cell: f32,
+    /// Screen ROWS the wall slice covers.
+    pub screen_rows_per_cell: f32,
+    /// Whether one source character may claim at most ONE screen column (see
+    /// [`crate::face_span::has_viewport_basis`]). `false` keeps the horizontal
+    /// nearest-neighbour fill, which is what a resampled (near-ring) bake needs.
+    pub dedup_columns: bool,
+}
+
+impl FlowScale {
+    /// Choose the text scale for a cell, or `None` when the cast published no screen
+    /// spans — in which case the caller must keep the historical mapping.
+    ///
+    /// `u_chars_per_unit` is the material's authored base density.
+    ///
+    /// The two horizontal spans are DELIBERATELY different measurements:
+    ///
+    /// * `frontal_cols` — `cols_per_unit / depth`, WITHOUT the grazing term. This picks
+    ///   the density. The grazing factor swings hard from the middle of a face to its
+    ///   edge, so feeding it into an octave decision would step the density MID-FACE and
+    ///   shear the text (measured: `s y n t h e t i c` in the middle of a wall and
+    ///   `ssyynntthheettiic` at its edge). Perpendicular depth is constant across a
+    ///   face-on wall and varies smoothly along an oblique one, so the density is
+    ///   stable exactly where the eye would notice a seam.
+    /// * `footprint_cols` — the FULL local span including the grazing term: how much
+    ///   screen one world unit really occupies at this cell. That is the right measure
+    ///   for "does this screen cell own the character's centre", which is a purely local
+    ///   question.
+    ///
+    /// A grazing face therefore ends up with density above its footprint, which is plain
+    /// minification — characters are skipped, never repeated.
+    #[inline]
+    pub fn for_view(
+        u_chars_per_unit: f32,
+        frontal_cols: f32,
+        footprint_cols: f32,
+        face_rows: f32,
+        dedup_columns: bool,
+    ) -> Option<FlowScale> {
+        let base_u = u_chars_per_unit;
+        // Every span must be a real, positive measurement; NaN fails `is_positive`
+        // (it fails every comparison) and so degrades to the historical mapping.
+        let is_positive = |v: f32| v.is_finite() && v > 0.0;
+        if !is_positive(base_u)
+            || !is_positive(frontal_cols)
+            || !is_positive(footprint_cols)
+            || !is_positive(face_rows)
+        {
+            return None;
+        }
+        let source_cols_per_unit = base_u * octave_below(frontal_cols / base_u);
+        let source_rows_per_cell = (CODE_V_LINES_PER_UNIT
+            * octave_below(face_rows / CODE_V_LINES_PER_UNIT))
+        .min(PANEL_ROWS as f32);
+        Some(FlowScale {
+            source_cols_per_unit,
+            screen_cols_per_unit: footprint_cols,
+            source_rows_per_cell,
+            screen_rows_per_cell: face_rows,
+            dedup_columns,
+        })
+    }
+}
+
+/// The largest HALF-octave step `≤ ratio` — i.e. `2^(k/2)` — clamped to
+/// ±[`CODE_FLOW_OCTAVE_CAP`] octaves.
+///
+/// Read straight off the IEEE-754 exponent field: no `log2`, no `exp2`, no table — the
+/// hot path pays a shift, a subtract, one mantissa compare and a clamp.
+/// (`floor(log2(x))` IS the unbiased exponent of a normal `f32`; the mantissa compare
+/// against √2 splits each octave in half.)
+///
+/// HALF-octaves, not whole ones, because the step size IS the worst-case slack between
+/// the chosen density and what the screen can resolve: whole octaves leave up to 2
+/// screen columns per source character at the bottom of a band (readable, but spelt
+/// `s y n t h e t i c`), half-octaves at most √2 ≈ 1.41. Finer still would re-flow the
+/// wall more often as the player walks for a diminishing gain.
+///
+/// A non-positive / non-finite / subnormal ratio yields a defined answer rather than a
+/// NaN density.
+#[inline]
+fn octave_below(ratio: f32) -> f32 {
+    if !ratio.is_finite() || ratio <= 0.0 {
+        return 1.0;
+    }
+    let bits = ratio.to_bits();
+    let unbiased = (((bits >> 23) & 0xFF) as i32) - 127;
+    let e = unbiased.clamp(-CODE_FLOW_OCTAVE_CAP, CODE_FLOW_OCTAVE_CAP);
+    let pow2 = f32::from_bits(((e + 127) as u32) << 23);
+    // Mantissa of `ratio` in [1, 2): take the extra √2 step when it reaches √2 and the
+    // clamp did not bite (outside the cap the answer is the clamp, not the ratio).
+    let mantissa = f32::from_bits((bits & 0x007F_FFFF) | (127 << 23));
+    if e == unbiased && mantissa >= std::f32::consts::SQRT_2 {
+        pow2 * std::f32::consts::SQRT_2
+    } else {
+        pow2
+    }
+}
+
+/// One axis of the flowing mapping: which source cell lives at world coordinate `t`,
+/// or `None` when this screen cell must draw BLANK.
+///
+/// `density` is source cells per world unit; `span` is screen cells per world unit.
+/// When the source is MAGNIFIED (`span > density`) each source cell covers more than
+/// one screen cell, and drawing it in all of them is the nearest-neighbour replication
+/// that turns `the lattice` into `thhe latttice`. Instead exactly ONE screen cell — the
+/// one whose world footprint contains the source cell's CENTRE — draws it, and the
+/// rest are blank. The extra space reads as letter/line spacing; no character is ever
+/// repeated, and (because the footprints tile the axis in a half-open partition) none
+/// is ever lost either.
+///
+/// `dedup` false keeps the replication: a cast whose columns are later RESAMPLED
+/// cannot make a per-column ownership decision (see [`FlowScale::dedup_columns`]).
+#[inline]
+fn flowed_index(t: f32, density: f32, span: f32, dedup: bool) -> Option<i64> {
+    if !t.is_finite() || !density.is_finite() || density <= 0.0 {
+        return None;
+    }
+    let g = (t * density).floor();
+    if !g.is_finite() || g.abs() > MAX_FLOW_INDEX {
+        return None;
+    }
+    if dedup && span.is_finite() && span > density {
+        // Half-open ownership so a centre landing exactly on a footprint boundary is
+        // claimed by exactly one cell.
+        let centre = (g + 0.5) / density;
+        let d = (t - centre) * span;
+        if !(-0.5..0.5).contains(&d) {
+            return None;
+        }
+    }
+    Some(g as i64)
+}
+
+/// Guard on the flowed index magnitude before the `f32 → i64` cast: a wall run at an
+/// absurd world coordinate (or a poisoned density) must degrade to a blank cell, never
+/// to a saturating cast.
+const MAX_FLOW_INDEX: f32 = 1.0e9;
+
+/// Longest face segment (source characters on one face) the justified mapping lays
+/// out; a denser face — only reachable at the octave clamp — keeps the flowing rule.
+const JUSTIFY_MAX_SEGMENT: i64 = 512;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  tests — the grid mechanism (content-independent)
+// ─────────────────────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Justified flow (L11's `Stewa rdship`): a face wider on
+    /// screen than its characters puts every character in ONE column and spends the
+    /// surplus on the spaces, so no gap ever lands inside a word; face `k` still holds
+    /// exactly characters `floor(k·d)..floor((k+1)·d)`, so faces join seamlessly.
+    #[test]
+    fn justified_flow_never_splits_a_word_and_joins_faces() {
+        let panel = CodePanel::build("t", "the quick brown fox jumps", 40, 1);
+        let s = FlowScale {
+            source_cols_per_unit: 10.0,
+            screen_cols_per_unit: 14.0,
+            source_rows_per_cell: 1.0,
+            screen_rows_per_cell: 1.0,
+            dedup_columns: true,
+        };
+        let face = |k: f32, w: usize| -> String {
+            (0..w)
+                .map(|j| {
+                    let (g, _) = panel.sample_flowing_justified(k + 0.5, 0.5, s, j as f32 + 0.5, w as f32);
+                    if g.class == CodeClass::Blank { ' ' } else { char::from_u32(g.glyph).unwrap_or('?') }
+                })
+                .collect()
+        };
+        let collapse = |t: &str| t.split(' ').filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
+        let (a, b) = (face(0.0, 14), face(1.0, 14));
+        assert_eq!(a.len(), 14);
+        assert_eq!(collapse(&a), "the quick", "face 0 = source 0..10: {a:?}");
+        assert_eq!(collapse(&b), "brown fox", "face 1 = source 10..20: {b:?}");
+        assert!(a.starts_with("the") && a.contains("quick"), "letters of a word are adjacent: {a:?}");
+        assert!(b.starts_with("brown") && b.contains("fox"), "{b:?}");
+        // No surplus (w == n) or a resampled cast: the plain flowing mapping, unchanged.
+        let r = FlowScale { dedup_columns: false, ..s };
+        assert_eq!(
+            panel.sample_flowing_justified(0.37, 0.5, r, 3.5, 14.0),
+            panel.sample_flowing(0.37, 0.5, r)
+        );
+    }
+
+    #[test]
+    fn build_lays_source_into_a_grid() {
+        let panel = CodePanel::build("t", "abc\n  de\n", 6, 4);
+        assert_eq!(panel.cols(), 6);
+        assert_eq!(panel.rows(), 4);
+        // Row 0 = "abc" then blanks.
+        assert_eq!(panel.cell(0, 0).glyph, b'a' as u32);
+        assert_eq!(panel.cell(2, 0).glyph, b'c' as u32);
+        assert_eq!(panel.cell(3, 0).class, CodeClass::Blank);
+        // Row 1 = "  de" — leading spaces are blank, 'd' at col 2.
+        assert_eq!(panel.cell(2, 1).glyph, b'd' as u32);
+        assert_eq!(panel.cell(0, 1).class, CodeClass::Blank);
+    }
+
+    #[test]
+    fn tabs_expand_to_stops() {
+        let panel = CodePanel::build("t", "\tx", 8, 1);
+        // Tab → 4 blanks, then 'x' at col 4.
+        for c in 0..TAB_WIDTH {
+            assert_eq!(panel.cell(c, 0).class, CodeClass::Blank);
+        }
+        assert_eq!(panel.cell(TAB_WIDTH, 0).glyph, b'x' as u32);
+    }
+
+    #[test]
+    fn line_comments_are_classified() {
+        let panel = CodePanel::build("t", "let x = 1; // hi", 40, 1);
+        // 'l' is code.
+        assert_eq!(panel.cell(0, 0).class, CodeClass::Code);
+        // The '//' onward is comment.
+        let slash = panel.cell(11, 0);
+        assert_eq!(slash.glyph, b'/' as u32);
+        assert_eq!(slash.class, CodeClass::Comment);
+        assert_eq!(panel.cell(14, 0).class, CodeClass::Comment); // 'h'
+    }
+
+    #[test]
+    fn block_comments_span_lines() {
+        let panel = CodePanel::build("t", "a /* c\nd */ e", 20, 2);
+        // '/' opens a block comment on row 0.
+        assert_eq!(panel.cell(2, 0).class, CodeClass::Comment);
+        assert_eq!(panel.cell(5, 0).class, CodeClass::Comment); // 'c'
+        // Row 1 'd' is still inside the block comment.
+        assert_eq!(panel.cell(0, 1).class, CodeClass::Comment);
+        // After the '*/' closes, the 'e' is code again.
+        let e_col = (0..20).find(|&c| panel.cell(c, 1).glyph == b'e' as u32).unwrap();
+        assert_eq!(panel.cell(e_col, 1).class, CodeClass::Code);
+    }
+
+    #[test]
+    fn sample_maps_uv_to_grid_in_reading_order() {
+        // A 3-line panel; sample left-to-right along v=top must read row 0 in order.
+        let panel = CodePanel::build("t", "HELLO\nWORLD\n", 10, 3);
+        // u_chars_per_unit = 1 → u directly indexes columns; v near 0 → row 0.
+        let read = |u: f32| panel.sample(u, 0.01, 1.0).glyph as u8 as char;
+        let line: String = (0..5).map(|i| read(i as f32 + 0.5)).collect();
+        assert_eq!(line, "HELLO", "u sweep must read the top line in order");
+        // v in the middle band → row 1.
+        let mid = panel.sample(0.5, 0.5, 1.0).glyph as u8 as char;
+        assert_eq!(mid, 'W', "v=0.5 lands on the second source row");
+    }
+
+    // ── the PROSE build (note placards) ──
+
+    /// The whole point of [`TextPanel::build_verbatim`]: a hand-drawn ASCII decal
+    /// reaches the wall with its geometry intact. The SAME body through
+    /// `build_wrapped` is shown to be destroyed, so the test proves the two builders
+    /// are not interchangeable rather than merely asserting one of them works.
+    #[test]
+    fn verbatim_build_preserves_decal_geometry_that_wrapping_destroys() {
+        const DECAL: &str = "+--[E] LIFT --+\n|   31 / HOLD |\n+-------------+";
+        let row = |p: &TextPanel, r: usize| -> String {
+            (0..p.cols())
+                .map(|c| char::from_u32(p.cell(c, r).glyph).unwrap_or('?'))
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        };
+
+        let v = TextPanel::build_verbatim("n", DECAL, 26, 8);
+        assert_eq!(row(&v, 0), "+--[E] LIFT --+");
+        assert_eq!(row(&v, 1), "|   31 / HOLD |");
+        assert_eq!(row(&v, 2), "+-------------+");
+        // The frame's columns line up — the property wrapping cannot preserve.
+        assert_eq!(v.cell(0, 0).glyph, u32::from('+'));
+        assert_eq!(v.cell(0, 1).glyph, u32::from('|'));
+        assert_eq!(v.cell(0, 2).glyph, u32::from('+'));
+        assert_eq!(v.cell(14, 0).glyph, u32::from('+'));
+        assert_eq!(v.cell(14, 1).glyph, u32::from('|'));
+
+        // Interior spaces are PLATE, not ink, so the shader does not paint them.
+        assert_eq!(v.cell(1, 1).class, CodeClass::Blank);
+
+        // And the contrast: wrapped, the frame collapses into one reflowed run.
+        let w = TextPanel::build_wrapped("n", DECAL, 26, 8);
+        assert_ne!(
+            row(&w, 1),
+            "|   31 / HOLD |",
+            "build_wrapped must NOT be usable for decals — if it preserved this, \
+             the Stencil register would be unnecessary"
+        );
+    }
+
+    /// A decal frame may legitimately be drawn out of BOX-DRAWING glyphs, which are
+    /// multi-byte. The verbatim builder advances by `char`, so one glyph occupies one
+    /// grid cell instead of being split across cells by a byte scanner.
+    #[test]
+    fn verbatim_build_keeps_multibyte_glyphs_one_per_cell() {
+        let p = TextPanel::build_verbatim("n", "┌─┐\n│x│\n└─┘", 8, 4);
+        assert_eq!(p.cell(0, 0).glyph, u32::from('┌'));
+        assert_eq!(p.cell(1, 0).glyph, u32::from('─'));
+        assert_eq!(p.cell(2, 0).glyph, u32::from('┐'));
+        assert_eq!(p.cell(0, 1).glyph, u32::from('│'));
+        assert_eq!(p.cell(1, 1).glyph, u32::from('x'));
+        assert_eq!(p.cell(0, 2).glyph, u32::from('└'));
+    }
+
+    /// A stencil is not source: `//` is two slashes of frame, not a comment run.
+    /// (The distinction is visible, because the note shader inks `Comment` cells with
+    /// the marker colour rather than the body colour.)
+    #[test]
+    fn verbatim_build_does_not_classify_slashes_as_comments() {
+        let p = TextPanel::build_verbatim("n", "// EXIT //", 16, 2);
+        for c in 0..10 {
+            assert_ne!(
+                p.cell(c, 0).class,
+                CodeClass::Comment,
+                "column {c} of a stencil must never be comment-classified"
+            );
+        }
+    }
+
+    /// Clipping and padding match [`TextPanel::build`]: over-wide lines clip, extra
+    /// rows are dropped, short lines and unused rows stay blank.
+    #[test]
+    fn verbatim_build_clips_and_pads_like_the_source_builder() {
+        let p = TextPanel::build_verbatim("n", "abcdef\nx\nq\nZZZ", 4, 3);
+        assert_eq!(p.cell(3, 0).glyph, u32::from('d'), "clipped at cols");
+        assert_eq!(p.cell(1, 1).class, CodeClass::Blank, "short line padded");
+        assert_eq!(p.cell(0, 2).glyph, u32::from('q'));
+        // Row 3 ("ZZZ") is past `rows` and simply does not exist.
+        assert_eq!(p.rows(), 3);
+    }
+
+    /// A zero-sized plate is a defined answer, not a panic.
+    #[test]
+    fn verbatim_build_handles_a_zero_sized_grid() {
+        let p = TextPanel::build_verbatim("n", "anything", 0, 0);
+        assert_eq!(p.cols(), 0);
+        assert_eq!(p.rows(), 0);
+    }
+
+    #[test]
+    fn wrapped_build_reflows_on_whitespace() {
+        let p = TextPanel::build_wrapped("n", "the lattice on the far wall is a face", 12, 6);
+        let row = |r: usize| -> String {
+            (0..p.cols())
+                .map(|c| char::from_u32(p.cell(c, r).glyph).unwrap_or('?'))
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        };
+        assert_eq!(row(0), "the lattice");
+        assert_eq!(row(1), "on the far");
+        assert_eq!(row(2), "wall is a");
+        assert_eq!(row(3), "face");
+        // Every word survived somewhere on the grid.
+        let all: String = (0..p.rows()).map(|r| row(r) + " ").collect();
+        for w in ["the", "lattice", "far", "wall", "face"] {
+            assert!(all.contains(w), "word {w:?} lost in the wrap");
+        }
+    }
+
+    /// A blank authored line becomes a blank grid row: paragraph structure is
+    /// meaningful in a placard body.
+    #[test]
+    fn wrapped_build_keeps_paragraph_breaks() {
+        let p = TextPanel::build_wrapped("n", "one\n\ntwo", 8, 4);
+        assert_eq!(p.cell(0, 0).glyph, u32::from('o'));
+        assert_eq!(p.cell(0, 1).class, CodeClass::Blank, "blank row preserved");
+        assert_eq!(p.cell(0, 2).glyph, u32::from('t'));
+    }
+
+    /// A word longer than the grid is HARD-BROKEN, never silently truncated.
+    #[test]
+    fn wrapped_build_hard_breaks_an_overlong_word() {
+        let p = TextPanel::build_wrapped("n", "abcdefgh", 4, 3);
+        let read = |r: usize| -> String {
+            (0..4)
+                .map(|c| char::from_u32(p.cell(c, r).glyph).unwrap_or('?'))
+                .collect()
+        };
+        assert_eq!(read(0), "abcd");
+        assert_eq!(read(1), "efgh");
+    }
+
+    /// `used_rows` counts only the rows that carry ink, so a short note can be
+    /// stretched across a wall face instead of hiding in the grid's top edge.
+    #[test]
+    fn used_rows_counts_inked_rows_only() {
+        let p = TextBuild::three_lines();
+        assert_eq!(p.rows(), 20);
+        assert_eq!(p.used_rows(), 3);
+        let blank = TextPanel::build_wrapped("n", "", 8, 5);
+        assert_eq!(blank.used_rows(), 0);
+    }
+
+    /// `sample_fitted` maps the WHOLE panel width and the used row band across a
+    /// unit face: `u` sweeps the full line, `v` sweeps the used rows.
+    #[test]
+    fn sample_fitted_spreads_the_block_over_a_unit_face() {
+        let p = TextPanel::build_wrapped("n", "AB\nCD", 2, 8);
+        let used = p.used_rows();
+        assert_eq!(used, 2);
+        // Four quadrants of the unit face → the four characters, in reading order.
+        let at = |u: f32, v: f32| char::from_u32(p.sample_fitted(u, v, used).glyph).unwrap_or('?');
+        assert_eq!(at(0.25, 0.25), 'A');
+        assert_eq!(at(0.75, 0.25), 'B');
+        assert_eq!(at(0.25, 0.75), 'C');
+        assert_eq!(at(0.75, 0.75), 'D');
+        // Clamping: coordinates on/past the edges stay inside the grid.
+        assert_eq!(at(1.0, 1.0), 'D');
+        assert_eq!(at(-1.0, -1.0), 'A');
+    }
+
+    /// THE MAGNIFICATION CLAMP: a face WIDER than the grid draws the text at integer
+    /// 1:1 scale, centred, with blank margins — never the nearest-neighbour stretch
+    /// that renders `read me` as `rreeaadd mmee`.
+    #[test]
+    fn a_wide_face_draws_the_panel_at_one_to_one_scale() {
+        let p = TextPanel::build_wrapped("n", "read me", 7, 4);
+        let used = p.used_rows();
+        // The face is 21 columns for a 7-column grid (3× magnification).
+        let face = 21.0;
+        let row: String = (0..21)
+            .map(|i| {
+                let u = (i as f32 + 0.5) / face;
+                char::from_u32(p.sample_fitted_clamped(u, 0.1, used, face).glyph).unwrap_or('?')
+            })
+            .collect();
+        assert_eq!(
+            row, "       read me       ",
+            "the block must be 1:1 and centred, with a blank plate margin"
+        );
+        // No character is ever doubled (the defect): the inked run reads exactly once.
+        assert_eq!(row.trim(), "read me");
+    }
+
+    /// The 1:1 block is CENTRED for an odd leftover too (extra column to the right),
+    /// and every column of the face has a defined answer.
+    #[test]
+    fn the_one_to_one_block_is_centred_with_an_odd_margin() {
+        let p = TextPanel::build_wrapped("n", "ab", 2, 2);
+        let face = 5.0; // 5 columns for a 2-wide grid ⇒ margins 1 left, 2 right
+        let read: String = (0..5)
+            .map(|i| {
+                let u = (i as f32 + 0.5) / face;
+                char::from_u32(p.sample_fitted_clamped(u, 0.1, 1, face).glyph).unwrap_or('?')
+            })
+            .collect();
+        assert_eq!(read, " ab  ");
+    }
+
+    /// REGRESSION (the `thhe latttice` defect): a FRACTIONAL span, sampled at column
+    /// centres, must still map every terminal column to a DISTINCT source column — no
+    /// character doubled, none skipped inside the block.
+    ///
+    /// This is the case a real frame produces: the placard face spans 30.14 columns, not
+    /// 30. An earlier attempt quantized the span (`ceil`), which shifted the mapping
+    /// mid-face and re-introduced exactly one doubled letter plus one dropped letter per
+    /// row. The continuous mapping must be monotone in the source index.
+    #[test]
+    fn a_fractional_span_never_doubles_or_drops_a_character() {
+        let p = TextPanel::build_wrapped("n", "abcdefghijklmnopqrstuvwxyz", 26, 2);
+        for span in [26.4f32, 27.0, 29.6, 30.14, 30.9, 41.3, 52.0] {
+            let n = span.floor() as usize;
+            let mut inked: Vec<char> = Vec::new();
+            let mut last: i64 = -1;
+            for i in 0..n {
+                let u = (i as f32 + 0.5) / span;
+                let g = p.sample_fitted_clamped(u, 0.1, 1, span);
+                if g.class == CodeClass::Blank {
+                    continue; // plate margin
+                }
+                let ch = char::from_u32(g.glyph).unwrap();
+                let idx = (ch as i64) - ('a' as i64);
+                assert!(
+                    idx > last,
+                    "span {span}: source column {idx} repeated or went backwards \
+                     after {last} (a doubled character)"
+                );
+                assert_eq!(idx, last + 1, "span {span}: source column {} was skipped", last + 1);
+                last = idx;
+                inked.push(ch);
+            }
+            let read: String = inked.into_iter().collect();
+            assert_eq!(read, "abcdefghijklmnopqrstuvwxyz", "span {span} lost text");
+        }
+    }
+
+    /// The VERTICAL twin: `rows_used` source lines across a taller face are drawn one
+    /// line per terminal row, centred, with no line rendered twice. The row coordinate
+    /// arrives as `k / span` (exactly on a bucket boundary — the caster's own integer
+    /// slice), which is why the mapping carries an epsilon.
+    #[test]
+    fn a_taller_face_draws_one_source_line_per_row() {
+        let p = TextPanel::build_wrapped("n", "one\ntwo\nthree\nfour", 8, 8);
+        let used = p.used_rows();
+        assert_eq!(used, 4);
+        let span = 14.0f32; // 14 screen rows for a 4-line block
+        // Read each screen row as text (horizontal span unknown ⇒ plain stretch), and
+        // keep the non-blank lines in order.
+        let lines: Vec<String> = (0..span as usize)
+            .map(|k| {
+                let v = k as f32 / span;
+                (0..8)
+                    .map(|c| {
+                        let u = (c as f32 + 0.5) / 8.0;
+                        char::from_u32(p.sample_fitted_clamped_2d(u, v, used, 0.0, span).glyph)
+                            .unwrap_or('?')
+                    })
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .filter(|s| !s.is_empty())
+            .collect();
+        assert_eq!(
+            lines,
+            vec!["one", "two", "three", "four"],
+            "each source line must appear EXACTLY once, in order (no vertical doubling)"
+        );
+    }
+
+    /// NO CLAMP, NO CHANGE: an unknown span (`0.0`) and any face at-or-below the grid
+    /// width are byte-identical to the plain `sample_fitted` — the guarantee that
+    /// existing frames (and the goldens over them) cannot move.
+    #[test]
+    fn an_unclamped_span_is_byte_identical_to_plain_sample_fitted() {
+        let p = TextPanel::build_wrapped("n", "alpha beta gamma delta\n\nsecond block", 12, 8);
+        let used = p.used_rows();
+        for span in [0.0f32, -3.0, f32::NAN, 1.0, 6.0, 12.0] {
+            for i in 0..64 {
+                let u = i as f32 / 63.0;
+                for j in 0..16 {
+                    let v = j as f32 / 15.0;
+                    assert_eq!(
+                        p.sample_fitted_clamped(u, v, used, span),
+                        p.sample_fitted(u, v, used),
+                        "span {span} moved a cell at (u={u}, v={v})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The clamp never reads outside the grid: a huge face, edge coordinates, and a
+    /// degenerate panel all return defined cells.
+    #[test]
+    fn the_clamp_is_defined_at_every_edge() {
+        let p = TextPanel::build_wrapped("n", "x", 1, 1);
+        for u in [-1.0f32, 0.0, 0.5, 1.0, 2.0] {
+            for face in [2.0f32, 1000.0, f32::INFINITY] {
+                let g = p.sample_fitted_clamped(u, 0.5, 1, face);
+                assert!(g.glyph == u32::from('x') || g.class == CodeClass::Blank);
+            }
+        }
+        let empty = TextPanel::build_wrapped("n", "", 0, 0);
+        assert_eq!(
+            empty.sample_fitted_clamped(0.5, 0.5, 0, 40.0).class,
+            CodeClass::Blank
+        );
+    }
+
+    // ── the STYLED prose build (per-register note layout) ──
+
+    /// Read grid row `r` as a string (trailing padding trimmed).
+    fn row_of(p: &TextPanel, r: usize) -> String {
+        (0..p.cols())
+            .map(|c| char::from_u32(p.cell(c, r).glyph).unwrap_or('?'))
+            .collect::<String>()
+            .trim_end()
+            .to_string()
+    }
+
+    /// A PREFIX is stamped on every wrapped row (not just the authored line's
+    /// first), it is classified as structure, and the body wraps EARLIER to make
+    /// room — no text is clipped by the prefix.
+    #[test]
+    fn styled_build_prefixes_every_wrapped_row() {
+        let style = LineStyle {
+            prefix: "> ",
+            indents: &[],
+        };
+        let p = TextPanel::build_wrapped_styled("n", "aaa bbb ccc ddd", 9, 4, &style);
+        assert_eq!(row_of(&p, 0), "> aaa bbb");
+        assert_eq!(row_of(&p, 1), "> ccc ddd");
+        // The prefix is structure (Comment), the body is Code.
+        assert_eq!(p.cell(0, 0).class, CodeClass::Comment);
+        assert_eq!(p.cell(1, 0).class, CodeClass::Comment);
+        assert_eq!(p.cell(2, 0).class, CodeClass::Code);
+    }
+
+    /// A per-row INDENT cycle produces a ragged left margin, and the wrap accounts
+    /// for it (row width shrinks by the indent).
+    #[test]
+    fn styled_build_walks_a_ragged_indent_cycle() {
+        let style = LineStyle {
+            prefix: "",
+            indents: &[0, 2],
+        };
+        let p = TextPanel::build_wrapped_styled("n", "aa bb cc dd", 6, 4, &style);
+        // Row 0 (indent 0) fits "aa bb"; row 1 (indent 2) starts at column 2.
+        assert_eq!(row_of(&p, 0), "aa bb");
+        assert_eq!(row_of(&p, 1), "  cc");
+        assert_eq!(p.cell(0, 1).class, CodeClass::Blank, "indent is not ink");
+        assert_eq!(p.cell(2, 1).glyph, u32::from('c'));
+    }
+
+    /// The FLUSH style is EXACTLY plain `build_wrapped` — the styling refactor moved
+    /// no unstyled glyph (the golden-stability guarantee for existing panels).
+    #[test]
+    fn flush_style_is_byte_identical_to_plain_wrap() {
+        let text = "the lattice on the far wall is a face\n\nand a very-long-unbreakable-token here";
+        for (cols, rows) in [(12usize, 8usize), (26, 24), (4, 3)] {
+            let a = TextPanel::build_wrapped("n", text, cols, rows);
+            let b = TextPanel::build_wrapped_styled("n", text, cols, rows, &LineStyle::FLUSH);
+            for r in 0..rows {
+                for c in 0..cols {
+                    assert_eq!(
+                        a.cell(c, r),
+                        b.cell(c, r),
+                        "flush styling changed cell ({c},{r}) at {cols}x{rows}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A prefix/indent wider than the grid is a defined, non-panicking layout (at
+    /// least one body column always survives).
+    #[test]
+    fn styled_build_survives_a_prefix_wider_than_the_grid() {
+        let style = LineStyle {
+            prefix: ">>>>>>>>",
+            indents: &[5],
+        };
+        let p = TextPanel::build_wrapped_styled("n", "word", 4, 2, &style);
+        assert_eq!(p.cols(), 4);
+        // Whatever it drew, it stayed inside the grid and produced a defined panel.
+        assert!(p.used_rows() <= 2);
+    }
+
+    /// A zero-size grid is a defined, blank panel (never a panic / divide-by-zero).
+    #[test]
+    fn degenerate_grid_is_blank_not_a_panic() {
+        let p = TextPanel::build_wrapped("n", "text", 0, 0);
+        assert_eq!(p.used_rows(), 0);
+        assert_eq!(p.sample_fitted(0.5, 0.5, 0).class, CodeClass::Blank);
+        assert_eq!(p.cell(0, 0).class, CodeClass::Blank);
+    }
+
+    /// Test-only builder helpers.
+    struct TextBuild;
+    impl TextBuild {
+        fn three_lines() -> TextPanel {
+            TextPanel::build_wrapped("n", "alpha\nbeta\ngamma", 10, 20)
+        }
+    }
+
+    // ── `from_cells` + `reclass_accent` (banner / stencil colour-key seams) ──
+
+    #[test]
+    fn from_cells_builds_the_grid_verbatim_and_pads_a_short_buffer() {
+        let cells = vec![
+            CodeGlyph { glyph: u32::from('A'), class: CodeClass::Code },
+            CodeGlyph { glyph: u32::from('B'), class: CodeClass::Code },
+        ];
+        let p = TextPanel::from_cells("n", 2, 2, cells);
+        assert_eq!(p.cell(0, 0).glyph, u32::from('A'));
+        assert_eq!(p.cell(1, 0).glyph, u32::from('B'));
+        // The buffer only carried row 0; row 1 is padded BLANK, not a panic.
+        assert_eq!(p.cell(0, 1).class, CodeClass::Blank);
+        assert_eq!(p.cell(1, 1).class, CodeClass::Blank);
+    }
+
+    #[test]
+    fn from_cells_clips_an_oversized_buffer() {
+        let cells = vec![CodeGlyph { glyph: u32::from('X'), class: CodeClass::Code }; 10];
+        let p = TextPanel::from_cells("n", 2, 2, cells);
+        assert_eq!(p.cols(), 2);
+        assert_eq!(p.rows(), 2);
+    }
+
+    #[test]
+    fn reclass_accent_retints_only_named_glyphs() {
+        let mut p = TextPanel::build_verbatim("n", "[E] EXIT", 10, 1);
+        p.reclass_accent(&['[', ']', 'E']);
+        assert_eq!(p.cell(0, 0).glyph, u32::from('['));
+        assert_eq!(p.cell(0, 0).class, CodeClass::Comment, "keyed glyph '[' retinted");
+        assert_eq!(p.cell(1, 0).glyph, u32::from('E'));
+        assert_eq!(p.cell(1, 0).class, CodeClass::Comment, "keyed glyph 'E' retinted");
+        assert_eq!(p.cell(2, 0).glyph, u32::from(']'));
+        assert_eq!(p.cell(2, 0).class, CodeClass::Comment);
+        // 'X' (the second E-less letter) and the frame's own untouched letters stay Code.
+        let x_col = (0..10).find(|&c| p.cell(c, 0).glyph == u32::from('X')).unwrap();
+        assert_eq!(p.cell(x_col, 0).class, CodeClass::Code, "un-keyed glyph stays body ink");
+        // Blank cells (spaces) are never touched.
+        let space_col = (0..10).find(|&c| p.cell(c, 0).class == CodeClass::Blank).unwrap();
+        p.reclass_accent(&[' ']);
+        assert_eq!(p.cell(space_col, 0).class, CodeClass::Blank, "a space has no ink to retint");
+    }
+
+    #[test]
+    fn reclass_accent_with_an_empty_key_is_a_no_op() {
+        let mut p = TextPanel::build_verbatim("n", "EXIT", 10, 1);
+        let before: Vec<CodeGlyph> = (0..10).map(|c| p.cell(c, 0)).collect();
+        p.reclass_accent(&[]);
+        let after: Vec<CodeGlyph> = (0..10).map(|c| p.cell(c, 0)).collect();
+        assert_eq!(before, after, "no colour key ⇒ byte-identical panel");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ISSUES (honest constraints of the mechanism)
+// ─────────────────────────────────────────────────────────────────────────────
+//  * Legibility is bounded by wall size in cells. One wall cell = one source
+//    character. A wall slice 3 cells tall cannot show a 200-row file; it shows the
+//    top 3 rows. Up close + face-on, with the wall filling the viewport, whole
+//    lines read. This is physics of the medium, declared, not hidden.
+//  * The comment scanner is lightweight, not a full lexer: it handles `//` and
+//    `/* */`, not string literals. A `//` inside a string could mis-tint — a
+//    colour-only consequence, never a correctness one.
+//  * `v` spans the whole grid across one wall slice, so on a short wall the text
+//    is vertically compressed (rows skipped). The horizontal `u` scale is the
+//    host's legibility knob. (A placard uses `sample_fitted` instead, which fits the
+//    block to the face and so does not suffer this.)
+//  * `build_wrapped` re-flows on WHITESPACE only — no hyphenation. A body authored
+//    with hard-wrapped short lines and one authored as long paragraphs both come out
+//    as an even block. Per-register margins/prefixes ride on top via
+//    `build_wrapped_styled` + `LineStyle` (see `crate::note_style`), which is layout
+//    only: it never changes WHICH words appear, just where each row starts.
+// ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,27 @@
+[package]
+name = "re_audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The AUDIO layer: an in-house procedural synth (oscillators + ADSR + noise →
+# PCM) plus a kira-backed rhythmic playback layer. The synth is a Rust port of
+# the legacy `synth.c` / `synth.h` — pure compute, engine-agnostic. The
+# playback layer (kira) is the only part that touches an audio device; it
+# provides a musical clock (BPM grid), sample-accurate beat scheduling, and
+# mixer-track effects, and degrades to silent no-ops when no device is present.
+# The transport / policy / director modules are pure logic with no device.
+# No terminal.
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+re_core = { workspace = true }
+
+# kira: the playback engine. default-features = false drops file decoding
+# (symphonia); we feed in-memory PCM via StaticSoundData built directly from
+# our synth's f32 frames. The "cpal" feature provides the default cpal-backed
+# DefaultBackend used for real device output.
+kira = { version = "0.12", default-features = false, features = ["cpal"] }

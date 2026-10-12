@@ -1,0 +1,58 @@
+# Rust / cargo build output. When checked out as a sibling of a game workspace
+# that depends on this repo, the two may share one target dir (see
+# .cargo/config.toml), but the pattern is anchored the same way either way.
+/target/
+**/*.rs.bk
+
+# MSVC debug symbols / incremental link state.
+*.pdb
+*.ilk
+/build/
+/bin/
+# NOTE: these MUST stay anchored — an unanchored `bin/` silently untracks
+# crate `src/bin/*.rs` ([[bin]] targets).
+
+# Editor scratch space: `ts_editor` writes preview/playtest sidecars and
+# autosaves here at runtime. Never tracked.
+/levels/_scratch/
+/levels/.autosave/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated ANSI dumps (ascii_fx / gallery-style tooling)
+*.ans
+
+# Archives: never tracked (provenance rule)
+*.zip
+*.7z
+*.rar
+
+# Downloaded third-party media must not land in the tree (use generated fixtures)
+/assets/texture/*.webp
+/assets/texture/*.gif
+
+# Local scratch / debug output
+*.log
+
+# Private working files that must never be committed to this public repository.
+# The engine repo is developed inside a larger private tree; this block stops a
+# stray `git add -A` from publishing its notes, logs or scratch output.
+STATUS.md
+PROJECT.md
+memory/
+.claude/
+docs/internal/
+scratch*/
+*.log
+
+# The line `/assets/texture/*.gif` above blocks downloaded GIFs, but this one is a
+# generated fixture (gen_texfixture --anim) that tests load; keep it tracked.
+!/assets/texture/gen_anim.gif

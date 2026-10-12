@@ -1,0 +1,35 @@
+# rust-toolchain.toml — pins the Rust toolchain for this workspace.
+#
+# We pin to the stable channel. The workspace currently compiles clean on
+# stable (verified 2026-06-24 on rustc 1.96.0 / 1.93.1). Using "stable"
+# rather than a hardcoded version means CI picks up the latest stable
+# automatically; a deliberate version freeze can be set here if a specific
+# stable patch regression is discovered.
+#
+# bevy_lint NOTE:
+# bevy_lint (from https://github.com/TheBevyFlock/bevy_cli) is a rustc plugin
+# that requires a SPECIFIC nightly toolchain — it ships its own rust-toolchain.toml
+# in the bevy_cli repository. It is NOT run as part of `cargo clippy`; it is
+# invoked separately as `cargo bevy lint` after installing bevy_cli from git.
+#
+# To run bevy_lint manually:
+#   1. cargo install --git https://github.com/TheBevyFlock/bevy_cli bevy_lint
+#      (this will install bevy_lint; it requires a nightly toolchain compatible
+#      with the bevy_cli branch — see its own rust-toolchain.toml)
+#   2. cargo bevy lint --workspace
+#
+# The stable pin here does NOT affect bevy_lint's toolchain selection.
+# bevy_lint is a rustc driver and brings its own required nightly via the
+# bevy_cli install. When invoked as `cargo bevy lint`, rustup automatically
+# switches to the nightly that bevy_cli was compiled against.
+#
+# In practice: run normal builds on stable (this file); run bevy_lint
+# separately as a periodic audit tool.
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+]

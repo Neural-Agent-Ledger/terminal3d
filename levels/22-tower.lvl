@@ -1,0 +1,328 @@
+# terminal3d example level — levels/22-tower.lvl
+#
+# DEMO · THREE-STOREY TOWER — ground floor → straight staircase → floor 1 →
+# second straight staircase (different corridor) → floor 2 with win objective.
+#
+# storey_height = 4  (4 cells per storey).
+#
+# --- Staircase A (floor 0 → floor 1): corridor at y=3, walking +x ---
+# Matches straight_staircase(base=(3,3,0), dir=PosX, storey_height=4).
+#   Tread 1: (4,3,1)   rampz posx
+#   Tread 2: (5,3,2)   rampz posx
+#   Tread 3: (6,3,3)   rampz posx
+#   Tread 4: (7,3,4)   rampz posx
+#   Landing: (8,3,4)   WallSolid Full
+#   Stairwell shaft at z=4: (4..6, 3) open '.' so player body fits through.
+#
+# --- Staircase B (floor 1 → floor 2): corridor at y=8, walking +x ---
+# A second PosX staircase in a southern corridor, placed symmetrically.
+# 4 ramp treads rise exactly 4 cells from floor-1 surface (feet z=5.0) to
+# floor-2 surface (feet z=9.0 = landing top).
+#
+#   Tread 1 (PosX):  (11,8,5)  rampz posx  — surface: z=5.0→6.0 as x=11→12
+#   Tread 2 (PosX):  (12,8,6)  rampz posx  — surface: z=6.0→7.0 as x=12→13
+#   Tread 3 (PosX):  (13,8,7)  rampz posx  — surface: z=7.0→8.0 as x=13→14
+#   Tread 4 (PosX):  (14,8,8)  rampz posx  — surface: z=8.0→9.0 as x=14→15
+#   Landing:         (15,8,8)  WallSolid Full  — feet on top = 9.0 (floor-2 level)
+#
+# Player path: spawn (2,3,1) → east on floor 0 → staircase A → floor 1
+# (feet z=5.0) → south to y=8.5 → east through staircase B → floor 2 (feet z=9.0).
+# Total z-rise ≈ 8 cells (2 storeys).
+#
+# Win objective (floor 2, z=9 space): node B output on the top floor.
+# The player MUST climb BOTH staircases to reach it.
+#
+# Spawn: floor 0 at (2,3,1) facing +x (east toward staircase A).
+#
+# Render (spawn view, facing east on floor 0):
+#   cargo run -p re_imgqa -- levels/22-tower.lvl
+# Interactive play requires a host game binary built on this engine.
+
+[meta]
+name        = 22-tower
+title       = Three-Storey Tower
+
+[room]
+size        = 18 12 13
+ambient     = solid
+storey_height = 4
+
+[material walls]
+fg          = #8898B8
+bg          = #0E1422
+recipe      = brick aspect=1.8 mortar_w=0.12 grain=0.20
+surface     = wall_solid
+
+[material ground]
+preset      = metal
+surface     = floor
+
+[material roof]
+preset      = void
+surface     = ceiling
+
+# ── Dense [cells] grid ────────────────────────────────────────────────────────
+# 18 cols (x=0..17) × 12 rows (y=0..11) × 13 z-layers.
+# '#' = WallSolid   '.' = Empty   '_' = Floor   '^' = Ceiling
+#
+# Straight staircase at y=3, walking +x (treads z=1..4, landing z=4):
+#   z=1: (4,3) = '#' rampz posx
+#   z=2: (5,3) = '#' rampz posx
+#   z=3: (6,3) = '#' rampz posx
+#   z=4: (7,3) = '#' rampz posx;  (8,3) = '#' landing
+#   z=4 stairwell: (4..6, 3) = '.' so player body fits through
+#
+# Staircase B (second straight staircase, corridor y=8, walking +x):
+#   z=5: (11,8) = '#' tread1 rampz posx
+#   z=6: (12,8) = '#' tread2 rampz posx
+#   z=7: (13,8) = '#' tread3 rampz posx
+#   z=8: (14,8) = '#' tread4 rampz posx;  (15,8) = '#' landing WallSolid Full
+[cells]
+size        = 18 12 13
+
+# z=0 — floor-0 slab. Interior = Floor '_'.
+##################
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+##################
+
+# z=1 — floor-0 space. Ramp tread 1 at (4,3,1).
+##################
+#................#
+#................#
+#...#............#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+##################
+
+# z=2 — floor-0 space. Ramp tread 2 at (5,3,2).
+##################
+#................#
+#................#
+#....#...........#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+##################
+
+# z=3 — floor-0 space. Ramp tread 3 at (6,3,3).
+##################
+#................#
+#................#
+#.....#..........#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+##################
+
+# z=4 — floor-1 slab.
+# y=3: stairwell shaft at x=4,5,6 ('.'); tread4 at x=7 ('#'); landing at x=8 ('#').
+# All other interior = Floor '_'.
+##################
+#________________#
+#________________#
+#___...##________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+##################
+
+# z=5 — floor-1 space.
+# Second staircase tread 1 at (11,8,5) rampz posx.
+##################
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#..........#.....#
+#................#
+#................#
+##################
+
+# z=6 — floor-1 space.
+# Second staircase tread 2 at (12,8,6) rampz posx.
+##################
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#...........#....#
+#................#
+#................#
+##################
+
+# z=7 — floor-1 space.
+# Second staircase tread 3 at (13,8,7) rampz posx.
+##################
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#............#...#
+#................#
+#................#
+##################
+
+# z=8 — floor-2 slab. Floor '_' interior.
+# Second staircase tread 4 at (14,8,8) rampz posx. Landing at (15,8,8).
+##################
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#________________#
+#_____________##_#
+#________________#
+#________________#
+##################
+
+# z=9 — floor-2 space. Win-objective nodes here.
+##################
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+##################
+
+# z=10 — floor-2 space.
+##################
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+##################
+
+# z=11 — floor-2 space.
+##################
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+#................#
+##################
+
+# z=12 — ceiling slab.
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
+
+# Staircase geometry — ramp shapes.
+# Staircase A (floor 0 → floor 1, corridor y=3, walking +x):
+#   straight_staircase(base=(3,3,0), dir=PosX, storey_height=4)
+# Staircase B (floor 1 → floor 2, corridor y=8, walking +x):
+#   straight_staircase(base=(10,8,4), dir=PosX, storey_height=4)
+shapes =
+4 3 1 rampz posx
+5 3 2 rampz posx
+6 3 3 rampz posx
+7 3 4 rampz posx
+11 8 5 rampz posx
+12 8 6 rampz posx
+13 8 7 rampz posx
+14 8 8 rampz posx
+
+# ── Puzzle: win objective on floor 2 ─────────────────────────────────────────
+# Node A (input) on floor 2; node B (output) on floor 2.
+# The player must climb BOTH staircases to interact with the switch and win.
+
+[node a]
+pos         = 3 6 9
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 13 6 9
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (3,6,9) (13,6,9)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #A0E0FF
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 12 6 8
+volume      = 1 1 1
+
+[door]
+pos         = 15 6 8
+target_parts = b
+
+# Spawn on floor 0, facing +x (east, toward the straight staircase).
+[player]
+spawn       = 2 3 1
+facing      = +x

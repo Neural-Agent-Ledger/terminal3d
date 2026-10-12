@@ -1,0 +1,85 @@
+# terminal3d example level — levels/97-semantic-surfaces.lvl
+#
+# A demo room that skins its surfaces with the SEMANTIC-SURFACE materials
+# (reactive-materials spec §5, R3): frost, wet_stone, redacted, watcher,
+# worn_floor, decay. Each is a catalog material that opts into a SurfaceFx
+# post-layer. Not a shipped puzzle — a showcase fixture. Dump it with:
+#   cargo run -p re_imgqa -- levels/97-semantic-surfaces.lvl
+#
+# The redacted/decay surfaces react to the generic state bus; with no bus
+# wired (the dump path) they render at their resting look — fully redacted
+# (█/░ bars) and the resting decay corruption floor.
+
+[meta]
+name        = level-97-semantic-surfaces
+title       = Semantic Surfaces
+
+[room]
+size        = 12 12 5
+ambient     = solid
+
+# The WATCHER wall — a world-fixed eye/face lattice that brightens on approach.
+[material watch_wall]
+preset      = watcher
+surface     = wall_solid
+
+# The REDACTED panel — the engine's source under censor bars (█/░), lifting as
+# state rises (resting = fully redacted with no bus).
+[material redact_wall]
+preset      = redacted
+surface     = wall_trace
+
+# The DECAY wall — bounded local bit-rot (mojibake + sickly tint).
+[material rot_wall]
+preset      = decay
+surface     = wall_matrix
+
+# The WORN floor — scuffed grooves + settled dust where iterations stood.
+[material floor_worn]
+preset      = worn_floor
+surface     = floor
+
+# The FROST ceiling — cold worley-crystal accretion (the cold semantic axis).
+[material frost_roof]
+preset      = frost
+surface     = ceiling
+
+[node a]
+pos         = 2 6 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 9 6 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,6,2) (9,6,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 9 6 1
+volume      = 1 1 1
+
+[door]
+pos         = 11 6 1
+target_parts = b
+
+[player]
+spawn       = 5 6 1
+facing      = +x

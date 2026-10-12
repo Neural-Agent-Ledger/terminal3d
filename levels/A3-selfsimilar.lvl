@@ -1,0 +1,106 @@
+# terminal3d example level — levels/A3-selfsimilar.lvl
+#
+# Scalable Material Overlay · Phase P3 — "Scale rules (SelfSimilar)" demo.
+#
+# THE PROOF: an authored `[zone]` carrying `scale = self_similar …` renders the
+# infinite-zoom self-similar fractal field ON THE ZONE'S SURFACE — the same
+# log-polar field the `Fractal` recipe uses, now applied to an OVERLAY ZONE rather
+# than only a recipe. Fractal is shown as ONE value of the ScaleRule slot
+# (composing OVER the zone's own base material colour), not a special subsystem.
+#
+# Mechanism (P3, DP4): the zone binds the `portal_wall` material BY NAME →
+# resolves to the shared 1-based colour palette id → `build_map` stamps that id
+# into the SOLID north-wall cells inside the zone box; `registry_for_map` reads
+# the zone's `scale = self_similar` and TAGS that colour material with
+# ScaleMode::SelfSimilar; the shade path then modulates each of those cells with
+# the log-polar field. SelfSimilar is ANIMATED — the static `--dump` captures ONE
+# phase; the spin/zoom plays live in-game (seamless SpinZoom loop).
+#
+# Layout (mirrors 92-fractal-portal so the field samples a big square region): a
+# TALL (z=10), DEEP (y=16) room. The player stands at the far SOUTH end looking
+# NORTH (-y), so the zone-skinned north wall is dead ahead and fills a large,
+# roughly square area of the view. The rest of the room is plain stone, so the
+# self-similar zone reads against an ordinary wall.
+#
+# Not a shipped puzzle — a render-demo fixture (like 92/A1/A2). A trivial single
+# ON pipe keeps it structurally valid for lvlcheck. Render it with:
+#   cargo run -p re_imgqa -- levels/A3-selfsimilar.lvl
+
+[meta]
+name        = level-A3-selfsimilar
+title       = SelfSimilar Zone
+
+[room]
+size        = 12 16 10
+ambient     = solid
+
+# The plain wall the self-similar zone reads against (the ambient perimeter).
+[material hall_stone]
+fg          = #8C96A2
+bg          = #0B0E12
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.25
+surface     = wall_solid
+
+# The ZONE material — a cool portal base. The `[zone]` below binds it BY NAME (it
+# is NOT a `surface = …` binding) and carries the scale rule, so ITS cells render
+# the self-similar field composed over this base colour. Authored as an ordinary
+# material; the SelfSimilar look comes entirely from the zone's `scale = …`.
+[material portal_wall]
+fg          = #4ED0E8
+bg          = #06141C
+recipe      = brick aspect=1.0 mortar_w=0.16 grain=0.20
+
+# ── THE OVERLAY ZONE (Scalable Material Overlay §6 P3) ───────────────────────
+# Covers the full NORTH wall (y=0), z=1..8 (8 vertical cells) × x=1..10, so the
+# field samples a large square-ish region dead ahead. Binds `portal_wall` by name
+# → resolves to the shared 1-based palette id → stamped into those solid wall
+# cells. scale = self_similar drives the log-polar field (5 arms, twist 0.9, a
+# little fBm warp) — the SHIPPED Droste-spiral shape, now on a zone.
+[zone north_portal]
+region      = (1,0,1)-(10,0,8)
+material    = portal_wall
+scale       = self_similar arms:5 twist:0.9 warp:0.3
+
+# ───────────────────────────── MINIMAL PUZZLE (sandbox) ─────────────────────
+# One input -> one output so the file is a real, loadable level (not just scenery).
+# Tucked at the spawn end, out of the vista.
+[node source]
+pos          = 4,13,2
+glyph        = A
+is_input     = yes
+
+[node sink]
+pos          = 7,13,2
+glyph        = O
+is_output    = yes
+threshold    = 1
+
+[pipe source->sink]
+state        = OFF
+path         = (4,13,2) (7,13,2)
+switch_at    = (5,13,2)
+
+[inputs]
+source       = 1
+
+[pedestal]
+center       = 7 13 1
+volume       = 1 1 1
+
+[door]
+pos          = 7 14 1
+target_parts = sink
+
+# Stand at the far SOUTH end looking NORTH (-y) down the long room: the
+# self-similar portal zone fills the far north wall dead ahead (large + square),
+# plain stone elsewhere.
+[player]
+spawn        = 6 14 1
+facing       = -y
+
+# A faint cool fog so depth reads without washing out the portal hues. fog_far
+# reaches the north wall so the zone stays visible at the far end.
+[palette]
+fog_color   = #06121C
+fog_near    = 5.0
+fog_far     = 22.0

@@ -1,0 +1,19 @@
+# Normalise text to LF in the repo and in checkouts on every OS, so level files and
+# tests behave identically on Windows (core.autocrlf=true) and Linux contributors.
+# A CRLF-saved level file breaks any test that anchors on LF line endings.
+* text=auto eol=lf
+
+# Windows launchers need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.gif binary
+*.webp binary
+*.vox binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.zip binary

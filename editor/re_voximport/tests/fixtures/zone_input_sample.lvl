@@ -1,0 +1,34 @@
+# re_voximport crate-local fixture — NOT shipped content.
+#
+# A neutral (no story text) minimal level exercising the `[zone_input]` section
+# (a floor-zone driving a node's input value), for the round-trip writer test.
+# An engine feature test is pointed at this crate-local fixture instead of a
+# campaign level in the separate game repository.
+
+[meta]
+name        = zone-input-fixture
+
+[room]
+size         = 6 8 3
+
+[node present]
+pos          = 3,4,1
+is_input     = yes
+
+[inputs]
+present      = 0
+
+[zone_input warm_square]
+node         = present
+region       = (1,5,1)-(2,7,1)
+
+[pedestal]
+center       = 4 4 1
+volume       = 1 1 1
+
+[door]
+pos          = 0 4 1
+
+[player]
+spawn        = 3 1 1
+facing       = +y

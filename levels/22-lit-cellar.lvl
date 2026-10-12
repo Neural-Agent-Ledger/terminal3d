@@ -1,0 +1,144 @@
+# terminal3d example level — levels/22-lit-cellar.lvl
+#
+# The LIGHTING demo (engine temporal-stability + lighting spec §1.3): a low,
+# dark cellar whose only real illumination is two authored `[light]` lamps.
+# Ambient is pulled down to 0.12 so the pools actually read as pools, the key
+# light is dimmed and turned warm, and `fog_height` lets the murk thin toward
+# the ceiling so the room has vertical air instead of a flat grey wash.
+#
+# This is the parse → render proof for `[light]` / `[atmosphere]`. Dump it with:
+#   cargo run -p re_imgqa -- levels/22-lit-cellar.lvl
+# Walk between the two lamps: the floor brightens under each and falls off
+# between them — that gradient is the whole point of the section.
+
+[meta]
+name        = level-22-lit-cellar
+title       = Lit Cellar
+
+[room]
+size        = 16 10 5
+ambient     = solid
+
+# ── LIGHTING ────────────────────────────────────────────────────────────────
+# Two warm lamps hung ABOVE the two node cubes — a lamp buried inside an Object
+# cell lights nothing the moment shadows are on, and `re_lvlcheck` warns about
+# it. The radius is just under half the room, so the two pools overlap faintly
+# in the middle instead of lighting the whole floor evenly.
+[light]
+pos         = 4.0, 5.0, 3.2
+color       = #FFB060
+radius      = 5.0
+intensity   = 1.1
+
+[light]
+pos         = 12.0, 5.0, 3.2
+color       = #60C0FF
+radius      = 5.0
+intensity   = 0.9
+
+# The key light is knocked back so it grades the walls without competing with
+# the lamps; ambient is the floor that keeps the unlit corners readable rather
+# than pure black. `fog_height` thins the murk above z = 0.4.
+[atmosphere]
+key_dir     = -0.3, -0.5, 0.8
+key_color   = #6070A0
+ambient     = 0.12
+fog_height  = 0.4 0.6
+postfx      = clean
+
+[palette]
+fog_color   = #050810
+fog_near    = 6.0
+fog_far     = 22.0
+
+# ── SURFACES ────────────────────────────────────────────────────────────────
+# Every surface here uses a recipe that is NOT self-lit — brick / circuit / grain /
+# substrate. That is the load-bearing choice in this file: a self-lit recipe
+# (scanline, truchet, fractal, hologram, codewall, voice) returns from the shader
+# BEFORE `light_surface` runs, so a wall skinned with one ignores every lamp in the
+# room. A dark cellar built out of self-lit walls is just a dark room.
+[material walls]
+recipe      = brick aspect=2 mortar_w=0.18 grain=0.7
+fg          = #9AA0A8
+bg          = #14181E
+surface     = wall_solid
+
+[material conduit]
+recipe      = circuit scale=1.6 trace_w=0.14
+fg          = #C09050
+bg          = #1A140C
+surface     = wall_trace
+
+[material ground]
+recipe      = substrate scale=2 held=0.4 released=0.25
+fg          = #8C8C90
+bg          = #0C0C10
+surface     = floor
+
+[material roof]
+recipe      = grain scale=3 speck=0.22 tile_eps=0.06
+fg          = #40485A
+bg          = #06080C
+surface     = ceiling
+
+# ── THE RELIEF WALL ─────────────────────────────────────────────────────────
+# An IMAGE material with real relief: the same 64x64 generated plate is bound as
+# both the colour source and the 8-bit height map (luminance = height, the classic
+# bump-map trick), so the lamps rake across rivets and seams instead of lighting a
+# flat decal. Without `relief =` an image material is self-lit and would ignore the
+# lamps entirely — see docs/MATERIALS.md, "Relief".
+[texture plate]
+file        = assets/texture/genplate_tex.png
+height      = assets/texture/genplate_tex.png
+
+# No `surface =`: the material joins the colour palette instead of taking a surface
+# slot, so the [zone] below can stamp it onto a patch of one wall.
+[material plate_relief]
+recipe      = image
+texture     = plate
+tile        = 3 2
+relief      = height_scale=1.4 normal_strength=1.0
+
+# The far +x wall, straight ahead of the spawn and beside the door, at eye height.
+[zone end_plate]
+region      = (15,2,1)-(15,4,3)
+material    = plate_relief
+scale       = none
+
+# ── PUZZLE ──────────────────────────────────────────────────────────────────
+[node a]
+pos         = 4 5 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 12 5 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = OFF
+path        = (4,5,2) (12,5,2)
+# The switch sits between the two lamps, in the dim overlap — flipping it is the
+# one thing to do here, and walking to it takes you through both pools.
+switch_at   = (8,5,2)
+
+# The input carries a live pulse, so the switch is the only thing between the
+# player and the win.
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 12 5 1
+volume      = 1 1 1
+
+[door]
+pos         = 15 5 1
+target_parts = b
+
+[player]
+# Spawn at the -x end looking down the room: the warm lamp, the switch and the
+# cold lamp line up ahead, so the first frame IS the lighting demo.
+spawn       = 2 5 1
+facing      = +x

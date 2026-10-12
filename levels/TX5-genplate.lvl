@@ -1,0 +1,116 @@
+# terminal3d example level — levels/TX5-genplate.lvl
+#
+# IMAGE-SAMPLER fixture on a FREE, GENERATED texture (NOT a shipped puzzle).
+#
+# WHY THIS EXISTS
+#   Earlier image-sampler anchors in this corpus bound a licensed photo texture
+#   that was later removed for licensing reasons. Deleting that file did not make
+#   those levels fail: the `[texture]` decode is best-effort, so they quietly
+#   render their untextured procedural fallback and their golden hashes keep
+#   matching each other while the sampler loses all coverage. This level binds a
+#   plate that is GENERATED from committed source, so the anchor cannot be lost
+#   to an asset removal.
+#
+#   Regenerate the plate with:
+#     cargo run -p re_voximport --bin gen_texfixture -- assets/texture/genplate_tex.png
+#   (`re_voximport::texfixture` — integer-only, byte-stable, unit-tested against the
+#   committed file.)
+#
+# THE PLATE, and what each of its properties buys for the image-sampler path:
+#   (a) a binary ALPHA silhouette (round head, tapering body, a window punched clean
+#       through it) on a transparent field  → drives the image cut-out path: the panes
+#       show the backdrop around AND inside the figure;
+#   (b) SATURATED, red-dominant colour     → the untextured fallback for these walls
+#       yields ZERO warm foreground cells, so warm cells on screen are the one signal
+#       that separates "the image sampler ran" from "a procedural recipe ran";
+#   (c) detail at TWO SCALES (a coarse 16-texel checker on its left half, a fine
+#       2-texel checker on its right, plus a hard-edged bright bar across both)
+#       → `off` / `quad` / `braille` resolve visibly DIFFERENT densities instead of
+#       three copies of one blob.
+#
+# LAYOUT (three sub-cell modes side by side for direct comparison):
+#   LEFT   pane (wall_trace,  x 1..3)  — subcell = off     → one solid `█` per cell
+#   CENTRE pane (wall_matrix, x 6..8)  — subcell = quad    → 2×2 quadrant block glyphs
+#   BACK wall (wall_solid, x 0..14)    — subcell = braille → 2×4 Braille (U+28xx)
+# Surface bindings are GLOBAL per wall kind, so each MODE rides its own surface. The
+# braille back wall is also the backdrop the two cut-out panes punch through, so the
+# alpha silhouette is visible as well as the sub-cell modes.
+
+[meta]
+name        = TX5-genplate
+title       = Generated Plate — Sub-cell Detail: off / quad / braille
+
+[room]
+size        = 14 10 6
+ambient     = solid
+
+# Decode the GENERATED plate once; every pane below samples this one texture.
+[texture genplate]
+file        = assets/texture/genplate_tex.png
+
+# OFF mode — the M3a baseline. Rides wall_trace (the LEFT cut-out pane).
+# Decal (1,4,1)-(3,4,4): world X 1..4 (size 3); interior walls z=1..4 ⇒ world Z up 1..5.
+[material img_off]
+recipe      = image
+texture     = genplate
+surface     = wall_trace
+span        = 1,3 5,4
+subcell     = off
+
+# QUAD mode (2×2). Rides wall_matrix (the CENTRE cut-out pane). Same 3-cell width + span,
+# so any difference from the OFF pane is the SUB-CELL mode, not the figure size.
+[material img_quad]
+recipe      = image
+texture     = genplate
+surface     = wall_matrix
+span        = 6,3 5,4
+subcell     = quad
+
+# BRAILLE mode (2×4). Rides wall_solid — the LARGE +y back wall AND the backdrop the two
+# cut-out panes reveal. The room is 14 wide ⇒ the back wall runs world X 0..14 (size 14);
+# walls stand z=1..4 ⇒ world Z up 1..5.
+[material img_braille]
+recipe      = image
+texture     = genplate
+surface     = wall_solid
+span        = 0,14 5,4
+subcell     = braille
+
+# LEFT pane (OFF): a one-cell-deep WallTrace slab, x 1..3 at y=4, z 1..4.
+[wall_decal pane_off]
+surface     = trace
+region      = (1,4,1)-(3,4,4)
+
+# CENTRE pane (QUAD): a one-cell-deep WallMatrix slab, x 6..8 at y=4, z 1..4.
+[wall_decal pane_quad]
+surface     = matrix
+region      = (6,4,1)-(8,4,4)
+
+# Minimal puzzle scaffolding so the loader is satisfied (render fixture, not a puzzle).
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 11,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (11,2,2)
+
+[pedestal]
+center       = 11 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 13 5 1
+
+# Spawn CLOSE to the panes (y=3, one cell short of the y=4 panes), centred, facing +y —
+# so the OFF pane (x1..3) and QUAD pane (x6..8) fill the view and their sub-cell detail
+# resolves, with the LARGE +y braille backdrop at y=9 behind.
+[player]
+spawn        = 5 3 1
+facing       = +y

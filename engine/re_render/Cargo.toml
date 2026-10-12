@@ -1,0 +1,19 @@
+[package]
+name = "re_render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+glam = { workspace = true }
+noise = "0.9"
+re_core = { workspace = true }
+re_world = { workspace = true }
+
+[dev-dependencies]
+# perfbench example: loads a real level file.
+re_level = { workspace = true }

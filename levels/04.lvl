@@ -1,0 +1,165 @@
+# terminal3d example level — levels/04.lvl
+#
+# L4 · "The Angle" (Parallax) — the graph is trivial; the difficulty is
+# PERCEPTUAL. Two pipes run to one output: a LIVE source (=1) and a DEAD decoy
+# source (=0). They are routed so that, viewed head-on from the spawn camera
+# down the centerline, the two pipe-lines STACK in depth and project to nearly
+# the same screen column — they read as ONE line. You cannot tell which pipe
+# originates at the live source from the spawn angle. You must MOVE (strafe /
+# step sideways) so PARALLAX separates the two heights into two distinct lines;
+# only then can you read which line is the live one and turn it on.
+#
+# Network (trivial):
+#   live     (IN=1)  -> output (T=1)     <- the real feed
+#   dead_src (IN=0)  -> output (T=1)     <- decoy; source is 0, contributes 0
+#
+# Door target: output (T=1).
+# Solution (1 toggle): turn ON live->output. (Toggling dead_src->output does
+#   nothing — its source is 0. The puzzle is to SEE which pipe is which.)
+#
+# FORMAT/LIMITATION NOTE: pipes are integer voxel cell-paths, so true sub-cell
+# parallax cannot be authored exactly. The faithful approximation here: the two
+# pipes share the SAME centerline (y) and run parallel along x, STACKED in z
+# (live at z=2, dead at z=4). Looking straight down the corridor from spawn they
+# overlap into one apparent vertical line; stepping sideways in y splits them by
+# parallax. The perceptual mechanic is delivered by geometry, not by an engine
+# camera-readout feature (none needed — geometry alone delivers the effect).
+
+[meta]
+name        = level-04-the-angle
+title       = The Angle
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 16 14 6
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# A narrow calibration corridor: a thin cold haze over deep slate fog so the two
+# stacked wire-lines read crisp against the depth — depth IS the puzzle here.
+[effects]
+matrix      = 0.1
+
+[palette]
+fog_color   = #0a0e14
+fog_near    = 2.5
+fog_far     = 18.0
+
+# COLOR-FORWARD palette: cold cyan room, with the LIVE wire glowing hot amber
+# (warm = alive) and the DEAD wire a cold dim grey-blue (cold = inert). Color
+# carries which-is-which once parallax has split the lines apart.
+[material shell]
+preset   = ice
+fg       = #58C0DC
+bg       = #050a12
+surface  = wall_solid
+
+[material deck]
+preset   = metal
+fg       = #66748A
+bg       = #08101a
+surface  = floor
+
+[material live_trace]
+preset   = monitor
+fg       = #FFC24A
+bg       = #100a06
+surface  = wall_trace
+
+[note model_thought pos=8,7,2 facing=-x]
+    Two lines or one line? Depends where you stand. Step sideways to
+    separate overlapping wires by parallax.
+
+[note system_log pos=10,4,2 facing=-x]
+    > parallax calibration. displayed wiring is view-dependent.
+    > one source is live; one is dead. resolve by translation, not by label.
+
+# --- output at the far -x end of the corridor, on the centerline ---
+[node output]
+pos          = 2,7,2
+glyph        = O
+pool         = OUTPUT MODEL SHAPE FORM EDGE SEEN
+pool_alt     = выход モデル salida forme Form
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+# --- the LIVE source: low (z=2), warm amber ---
+[node live]
+pos          = 6,7,2
+glyph        = L
+pool         = LIVE TRUE WARM NEAR-LINE REAL-EDGE
+pool_alt     = живой 生 vivo vrai echt
+color        = #FFC24A
+is_input     = yes
+
+# --- the DEAD decoy source: directly ABOVE live (z=4), cold grey-blue.
+#     From the spawn axis it sits behind/over the live source on the same
+#     screen column; only sideways motion reveals it is a separate, dead line. ---
+[node dead_src]
+pos          = 6,7,4
+glyph        = d
+pool         = DEAD FALSE COLD FAR-LINE INERT-EDGE
+pool_alt     = мёртвый 死 muerto faux tot
+color        = #54627A
+is_input     = yes
+
+# === the LIVE feed: straight along the centerline at z=2 ===
+[pipe live->output]
+state        = OFF
+path         = (6,7,2) (2,7,2)
+switch_at    = (4,7,2)
+density      = 0.7
+color        = #FFC24A
+
+# === the DEAD feed: runs parallel at z=4 (stacked directly over the live line),
+#     then drops to the output. Its switch sits at a reachable z=2 cell on the
+#     descent so the player CAN toggle it (and discover it does nothing). ===
+[pipe dead_src->output]
+state        = OFF
+path         = (6,7,4) (3,7,4) (3,7,2) (2,7,2)
+switch_at    = (3,7,2)
+density      = 0.6
+color        = #54627A
+
+[part edge_glyph]
+size         = 3 3 1
+mask         =
+..#
+.#.
+#..
+color        = #FFC24A
+offset       = 0 0 1
+
+[part edge_base]
+size         = 3 3 1
+mask         =
+###
+...
+...
+color        = #58C0DC
+offset       = 0 0 0
+
+[emit output=1]
+parts        = edge_glyph edge_base
+
+[inputs]
+live         = 1
+dead_src     = 0
+
+[pedestal]
+center       = 4 7 1
+volume       = 3 3 2
+
+[door]
+pos          = 14 7 1
+target_parts = output
+
+[player]
+# Spawn at the +x corridor mouth on the centerline (y=7), looking -x straight
+# down the run so the two stacked pipe-lines overlap into one apparent line.
+# The player must STRAFE to split them by parallax before solving.
+spawn        = 12 7 1
+facing       = -x

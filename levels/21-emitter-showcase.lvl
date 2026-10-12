@@ -1,0 +1,351 @@
+# terminal3d example level — levels/21-emitter-showcase.lvl
+#
+# ENGINE TECH-DEMO (NOT a campaign puzzle). A coherent small room whose only job
+# is to exercise the particle-emitter control set end-to-end, the way
+# 90-material-catalog exercises the material pipeline. Every [emitter] section
+# below drives a different axis of re_world::EmitterSpec so a --dump / live frame
+# shows the full vocabulary at once:
+#
+#   * three-stop RampOverAge colour          (ember_torch)
+#   * a kindred glyph family + ByAge bold     (ember_torch / growth_bloom)
+#   * a tight direction cone (spread_deg)     (spark_jet)
+#   * size + growth over age                  (growth_bloom)
+#   * rate vs. one-shot burst                 (spark_burst)
+#   * speed + speed_spread                    (spark_jet)
+#   * path_jitter + swirl turbulence          (drift_haze)
+#   * an upward buoyant ember                 (ember_torch)
+#   * a slow drifting cool haze               (drift_haze)
+#   * RandomPick colour variety               (confetti_pick)
+#   * an explicit glyph_set override          (rune_motes)
+#   * a screen-pinned HUD spark (origin_screen) (hud_spark)
+#
+# A second axis (motion kinds, distributions, jitter/ramp/glyph variety, trails,
+# bounce, dust visibility, word particles — see docs/EMITTERS.md):
+#   * curl-noise horizontal drift             (curl_smoke)
+#   * an orbiting attractor swirl             (orbit_glow)
+#   * a bouncing spark trail w/ direction glyphs (bounce_trail)
+#   * word particles cycling a literal string (word_motes)
+# Full per-behaviour demos live in their own `levels/EM-*.lvl` files (one
+# family each, easier to isolate in a `--dump`); this section is a SAMPLING
+# alongside the existing catalogue above, not a replacement for it.
+#
+# The puzzle itself is a trivial one-pipe network (so the level loads + is valid);
+# solving it is not the point — the particles are.
+
+[meta]
+name        = 21-emitter-showcase
+title       = Emitter Showcase
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+# ── A couple of materials so the room is not just flat floor ──────────────────
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+# ── The trivial network (keeps the level valid) ───────────────────────────────
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ─────────────────────────────── EMITTERS ────────────────────────────────────
+
+# 1) Rising EMBER TORCH — three-stop ramp over age (bright gold → orange → ember
+#    red), the GROWTH_DOT kindred family, a quick bold flash at birth (ByAge),
+#    buoyant upward accel. The canonical "torch on the wall" look.
+[emitter ember_torch]
+origin_world    = 2.5 2.0 1.0
+colors          = 0xFFD27F 0xFF7A1A 0x6E1200
+color_mode      = RampOverAge
+family          = growth_dot
+bold            = ByAge
+direction       = 0.0 0.0 1.0
+spread_deg      = 25.0
+size            = 1.0
+growth          = 1.4
+rate            = 26.0
+speed           = 0.9
+speed_spread    = 0.2
+path_jitter     = 0.05
+lifetime        = 2.2
+lifetime_spread = 0.3
+accel           = 0.0 0.0 0.35
+max_particles   = 256
+seed            = 101
+blend           = KeepBg
+
+# 2) GROWTH BLOOM — a slow column that visibly GROWS then fades: small size at
+#    birth, growth=2.4 blows it up over its life, the growth_bars family reads as
+#    a blooming bar. Always-bold so it glows. Cool teal ramp.
+[emitter growth_bloom]
+origin_world    = 4.5 2.0 0.6
+colors          = 0x7FFFE0 0x2AC0A8 0x0A4038
+color_mode      = RampOverAge
+family          = growth_bars
+bold            = On
+direction       = 0.0 0.0 1.0
+spread_deg      = 15.0
+size            = 1.0
+growth          = 2.4
+rate            = 12.0
+speed           = 0.55
+speed_spread    = 0.1
+lifetime        = 3.0
+lifetime_spread = 0.4
+accel           = 0.0 0.0 0.05
+max_particles   = 192
+seed            = 202
+blend           = KeepBg
+
+# 3) SPARK JET — a tight DIRECTION cone fired sideways at speed, fast and short.
+#    spread_deg=8 keeps it pencil-thin; high speed + speed_spread gives a jet.
+#    Bold by proximity so near sparks pop. Opaque so the sparks read solid.
+[emitter spark_jet]
+origin_world    = 2.0 5.0 1.4
+colors          = 0xFFFFFF 0xFFE27A 0xC03000
+color_mode      = RampOverAge
+family          = anim_arc
+bold            = ByProximity
+direction       = 1.0 0.0 0.25
+spread_deg      = 8.0
+size            = 1.0
+growth          = 1.0
+rate            = 40.0
+speed           = 3.2
+speed_spread    = 0.8
+path_jitter     = 0.1
+lifetime        = 0.9
+lifetime_spread = 0.15
+accel           = 0.0 0.0 -1.2
+max_particles   = 320
+seed            = 303
+blend           = Opaque
+
+# 4) DRIFT HAZE — a nearly weightless cool mist with PATH_JITTER + SWIRL, so the
+#    motes wander and curl counter-clockwise (positive swirl). The haze_dot
+#    kindred family, long-lived, KeepBg so wall/holo bg shows through.
+[emitter drift_haze]
+origin_world    = 6.5 5.0 1.2
+colors          = 0x9FB8D8 0x4A7AA8 0x2A3A52
+color_mode      = RampOverAge
+family          = haze_dot
+bold            = Off
+direction       = 0.0 0.0 1.0
+spread_deg      = 60.0
+size            = 1.0
+growth          = 1.2
+rate            = 16.0
+speed           = 0.35
+speed_spread    = 0.12
+path_jitter     = 0.4
+swirl           = 0.6
+lifetime        = 4.5
+lifetime_spread = 0.6
+accel           = 0.0 0.0 -0.01
+max_particles   = 256
+seed            = 404
+blend           = KeepBg
+
+# 5) CONFETTI PICK — RandomPick colour mode: each mote grabs ONE of the three
+#    stops at birth and keeps it, so the spray is a mix of magenta / cyan / amber.
+#    A gentle omni-ish fountain.
+[emitter confetti_pick]
+origin_world    = 5.0 4.5 0.8
+colors          = 0xFF3CA0 0x3CD0FF 0xFFC83C
+color_mode      = RandomPick
+family          = growth_density
+bold            = Off
+direction       = 0.0 0.0 1.0
+spread_deg      = 75.0
+size            = 1.0
+growth          = 1.0
+rate            = 22.0
+speed           = 1.4
+speed_spread    = 0.5
+lifetime        = 1.8
+lifetime_spread = 0.4
+accel           = 0.0 0.0 -1.6
+max_particles   = 256
+seed            = 505
+blend           = KeepBg
+
+# 6) RUNE MOTES — an explicit glyph_set OVERRIDE (bypasses the family registry):
+#    the particle cycles through these bespoke glyphs by age. Fixed colour mode
+#    (single tint). A slow rising occult shimmer.
+[emitter rune_motes]
+origin_world    = 8.0 3.0 0.8
+colors          = 0xB070FF 0x6030A0 0x201040
+color_mode      = Fixed
+glyph_set       = · : * ✦ ✧
+bold            = On
+direction       = 0.0 0.0 1.0
+spread_deg      = 35.0
+size            = 1.0
+growth          = 1.3
+rate            = 10.0
+speed           = 0.6
+speed_spread    = 0.15
+lifetime        = 3.2
+lifetime_spread = 0.5
+accel           = 0.0 0.0 0.08
+max_particles   = 160
+seed            = 606
+blend           = KeepBg
+
+# 7) SPARK BURST — a one-shot BURST (no steady rate): emit exactly N sparks at
+#    activation, then idle. Demonstrates `burst` vs `rate`. Fast, gravity-pulled.
+[emitter spark_burst]
+origin_world    = 5.0 3.0 1.6
+colors          = 0xFFFFFF 0xFFD060 0x803000
+color_mode      = RampOverAge
+family          = anim_spin
+bold            = On
+direction       = 0.0 0.0 1.0
+spread_deg      = 180.0
+burst           = 64
+speed           = 2.6
+speed_spread    = 0.9
+lifetime        = 1.1
+lifetime_spread = 0.2
+accel           = 0.0 0.0 -3.0
+max_particles   = 128
+seed            = 707
+blend           = Opaque
+
+# 8) HUD SPARK — a SCREEN-PINNED emitter (origin_screen, never occluded by
+#    geometry): a faint stream fixed near the top-left of the viewport, proving
+#    the screen-space anchor path. Drifts down the frame.
+[emitter hud_spark]
+origin_screen   = 6.0 3.0
+colors          = 0x60FF60 0x30A030 0x103810
+color_mode      = RampOverAge
+family          = haze_wave
+bold            = Off
+direction       = 0.0 1.0 0.0
+spread_deg      = 20.0
+rate            = 8.0
+speed           = 1.0
+speed_spread    = 0.2
+lifetime        = 2.5
+lifetime_spread = 0.3
+max_particles   = 96
+seed            = 808
+blend           = KeepBg
+
+# ───────────────────────── MOTION & VARIETY ──────────────────────────────────
+# (see docs/EMITTERS.md "Variety & randomisation keys" for the full grammar of
+# every key used below.)
+
+# 9) CURL SMOKE — horizontal curl-noise drift (W1) layered on top of a gentle
+#    buoyant accel, instead of straight-line ballistic motion: the column
+#    wanders side to side as it rises, never repeating the same path twice
+#    across its life even though it is fully deterministic frame to frame.
+[emitter curl_smoke]
+origin_world    = 3.0 7.0 0.6
+colors          = 0xD8E8F0 0x90A8B8 0x384850
+color_mode      = RampOverAge
+family          = haze_dot
+bold            = Off
+motion          = curl scale=0.7 strength=0.9 evolve=0.15
+rate            = 14.0
+lifetime        = 3.5
+lifetime_spread = 0.5
+accel           = 0.0 0.0 0.15
+max_particles   = 160
+seed            = 909
+blend           = KeepBg
+
+# 10) ORBIT GLOW — Attract motion (W2): pulled toward a fixed point above its
+#     spawn column with a tangential swirl term, so particles loop around the
+#     target rather than fall straight into it — a slow, glowing orbit.
+[emitter orbit_glow]
+origin_world    = 7.5 6.5 1.0
+colors          = 0xFFF0C0 0xE0A030 0x704010
+color_mode      = RampOverAge
+family          = growth_dot
+bold            = ByAge
+motion          = attract 7.5 6.5 2.2 strength=3.0 swirl=1.2
+rate            = 8.0
+lifetime        = 4.0
+lifetime_spread = 0.4
+max_particles   = 96
+seed            = 910
+blend           = KeepBg
+
+# 11) BOUNCE TRAIL — sparks (W5) that fall, bounce off the emitter's own
+#     origin height with damped restitution, and drag a fading directional
+#     ghost trail (W4) behind them instead of a bare point.
+[emitter bounce_trail]
+origin_world    = 4.0 8.5 1.8
+colors          = 0xFFFFFF 0xFFC060 0x904000
+color_mode      = RampOverAge
+family          = anim_arc
+bold            = ByProximity
+direction       = 0.6 0.4 0.5
+spread_deg      = 30.0
+speed           = 2.2
+speed_spread    = 0.5
+rate            = 10.0
+lifetime        = 2.0
+lifetime_spread = 0.3
+accel           = 0.0 0.0 -3.0
+bounce          = 0.55
+trail           = 4 fade=0.6 dir_glyphs=on
+max_particles   = 96
+seed            = 911
+blend           = Opaque
+
+# 12) WORD MOTES — glyph_source = text (W12): each spawned particle claims the
+#     next character of "STATE", cycling, so the word visibly assembles/breaks
+#     apart as a steady stream of motes carries it upward.
+[emitter word_motes]
+origin_world    = 6.0 8.0 0.5
+colors          = 0x60FFB0 0x30A070 0x104030
+color_mode      = RampOverAge
+family          = growth_dot
+bold            = On
+glyph_source    = text "STATE"
+direction       = 0.0 0.0 1.0
+spread_deg      = 10.0
+speed           = 0.5
+rate            = 5.0
+lifetime        = 3.0
+lifetime_spread = 0.2
+max_particles   = 40
+seed            = 912
+blend           = KeepBg

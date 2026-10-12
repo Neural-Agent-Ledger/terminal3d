@@ -1,0 +1,60 @@
+# terminal3d example level — levels/A5-child.lvl
+#
+# Scalable Material Overlay · Phase P4 — the CHILD SCENE for an `[inset]` ("врезка").
+# Referenced by `levels/A5-inset.lvl`'s `[inset] child = A5-child.lvl`.
+#
+# In P4 the parent loads this child ONE LEVEL DEEP and distils its REPRESENTATIVE
+# COLOUR — the FIRST `[material]`'s base `fg` — into the resolved inset's RGB. Full
+# child-scene geometry compositing is DEFERRED, so only the colour is consumed here.
+# A tiny, valid, loadable level (one input -> one output) so it parses cleanly and
+# could be played on its own.
+#
+# The representative colour is the WARM AMBER below (#F2A33C) — deliberately distinct
+# from the parent zone's COOL portal cyan, so the inset reveal is unmistakable in a
+# dump.
+
+[meta]
+name        = level-A5-child
+title       = Inset Child (amber)
+
+[room]
+size        = 8 8 6
+ambient     = solid
+
+# FIRST [material] — its `fg` is the inset's representative colour (warm amber).
+[material amber_core]
+fg          = #F2A33C
+bg          = #1A0F04
+recipe      = brick aspect=1.0 mortar_w=0.16 grain=0.20
+surface     = wall_solid
+
+[node src]
+pos          = 2,5,2
+glyph        = A
+is_input     = yes
+
+[node dst]
+pos          = 5,5,2
+glyph        = O
+is_output    = yes
+threshold    = 1
+
+[pipe src->dst]
+state        = OFF
+path         = (2,5,2) (5,5,2)
+switch_at    = (3,5,2)
+
+[inputs]
+src          = 1
+
+[pedestal]
+center       = 5 5 1
+volume       = 1 1 1
+
+[door]
+pos          = 5 6 1
+target_parts = dst
+
+[player]
+spawn        = 4 6 1
+facing       = -y

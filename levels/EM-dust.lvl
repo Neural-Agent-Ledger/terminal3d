@@ -1,0 +1,87 @@
+# terminal3d example level — levels/EM-dust.lvl
+#
+# PARTICLE-EMITTER SHOWCASE (dust in light shafts) — NOT a campaign puzzle.
+# `visibility = lit`: a dust mote's opacity is sampled ONCE at birth from the
+# nearest baked light, scaled by `gain`, and held for its life — invisible in
+# the dark, visible where a shaft actually falls.
+#
+# A host resolves every `EmitterSpec` through `Emitter::from_spec_lit(spec,
+# &level.lights)` rather than the light-less `Emitter::from_spec` (see
+# docs/EMITTERS.md "Known gaps"). The `[light]` below is the shaft this
+# emitter gates on: with it present, a render shows the dust lit near the
+# beam and dark outside its radius, matching
+# `emitter::tests::dust_visibility_lit_is_gated_by_nearby_lights`.
+
+[meta]
+name        = EM-dust
+title       = Lit Dust (shaft-gated)
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ── The shaft's light source — the gate the dust below reads at birth ────────
+[light]
+pos         = 5.0 5.0 3.6
+color       = #FFF3D0
+radius      = 3.5
+intensity   = 2.2
+
+# ── LIT DUST — visibility = lit (W9) ──────────────────────────────────────────
+[emitter shaft_dust]
+origin_world    = 5.0 5.0 2.5
+colors          = 0xFFF8E0 0xE8D8A0 0xB0A070
+color_mode      = Fixed
+family          = haze_dot
+bold            = Off
+direction       = 0.0 0.0 -1.0
+spread_deg      = 70.0
+speed           = 0.2
+speed_spread    = 0.1
+rate            = 20.0
+lifetime        = 5.0
+lifetime_spread = 0.8
+accel           = 0.0 0.0 -0.05
+visibility      = lit gain=4.0
+max_particles   = 220
+seed            = 9401
+blend           = KeepBg

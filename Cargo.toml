@@ -1,0 +1,152 @@
+[workspace]
+resolver = "2"
+members = ["engine/*", "editor/*", "apps/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# Code is dual-licensed MIT OR Apache-2.0 at the user's option; every crate
+# inherits this via `license.workspace = true`. Example levels and generated
+# assets in this repository are under the same terms (see PROVENANCE.toml).
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Bevy headless: ONLY the features needed for MinimalPlugins + ScheduleRunnerPlugin
+# + bevy_state. Explicitly NO bevy_render / bevy_winit / wgpu.
+bevy = { version = "0.19", default-features = false, features = [
+    "bevy_state",
+    "std",
+] }
+crossterm = "0.29"
+glam = "0.33"
+
+# ─────────────────────────── ecosystem reuse ────────────────────────────────
+# REUSE-FIRST POLICY (see CONTRIBUTING.md "Dependencies"): below our unique
+# terminal-renderer layer we lean on Bevy + the Bevy ecosystem instead of
+# hand-rolling. We adopt crates for NEW capability; we do NOT churn working,
+# golden-tested code (the DDA raycaster, ASCII material/shading, synth
+# recipes, grid collision stay bespoke — they ARE the novel layer). Every
+# crate below is verified against Bevy 0.19 and must keep
+# `cargo build/test --workspace` green.
+
+# bevy_rand — reproducible, ECS-managed RNG as a Bevy resource (`Entropy`).
+# 0.15 targets bevy ^0.19 and needs only bevy_app/ecs/math/reflect — all in our
+# headless feature set (no render/winit). ADOPTED as the deterministic RNG
+# source for NEW randomness wired through the App; the existing golden LCG /
+# SplitMix paths in re_audio/re_glitch are deliberately KEPT (their seeded
+# outputs are pinned by determinism tests). Re-verified 2026-09-28 at 0.15.2 —
+# still the newest release compatible with bevy 0.19.
+# Consumed by `engine/re_runtime` (also duplicated in a downstream game's own
+# workspace.dependencies for its own direct use — keep both `Cargo.lock`s
+# aligned on `cargo update`).
+bevy_rand = { version = "0.15", features = ["wyrand"] }
+bevy_prng = { version = "0.15", features = ["wyrand"] }
+
+# ── Multiplayer testbed deps (engine/ts_net + apps/ts_netplay ONLY) ─────────
+# bevy_replicon 0.44.2 — server-authoritative world replication + client/server
+# events for Bevy 0.19. Verified: Cargo.toml has [dependencies.bevy] version="0.19"
+# default-features=false, features=["bevy_state"] only — no render/winit/asset
+# pull-in. We disable the `scene` default (bevy/bevy_scene) — not needed.
+# Headless-clean. Re-verified 2026-09-28 — 0.44.2 is still the newest release
+# compatible with bevy 0.19.
+bevy_replicon = { version = "0.44", default-features = false, features = ["client", "server"] }
+#
+# bevy_replicon_renet 0.20.0 — renet/UDP transport for bevy_replicon. Verified:
+# production deps are bevy_app/ecs/time 0.19 + renet 2.0 + renet_netcode 2.0 only
+# (no render/winit in production deps — only in dev-deps). Headless-clean.
+# Re-verified 2026-09-28 — 0.20.0 is still the newest release.
+bevy_replicon_renet = { version = "0.20", default-features = false, features = ["client", "server", "renet_netcode"] }
+
+# `.vox` import (engine/re_level for `[vox NAME]` sections; editor/re_voximport
+# for the converter). NOT game-only any more — the split moved re_level (which
+# reads `.vox` directly via dot_vox) into this repo.
+dot_vox = "5"
+serde = { version = "1", features = ["derive"] }
+# toml 1.x (dependency-refresh pass, 2026-09-28) — bumped from 0.8. Our usage
+# is exactly `toml::from_str`/`toml::to_string` over plain serde structs (no
+# `toml::Value`/`Table`/`Datetime` anywhere in the tree), which is unchanged
+# across the 0.8 -> 1.x jump; verified by a scratch build before landing here.
+toml = "1"
+
+# ── Internal crates ──────────────────────────────────────────────────────
+# Every path below is relative to THIS file (the workspace root), matching the
+# depth-2 invariant: `engine/<name>` and `editor/<name>` and `apps/<name>` are
+# each exactly one segment under this manifest's directory.
+re_core      = { path = "engine/re_core" }
+re_world     = { path = "engine/re_world" }
+re_level     = { path = "engine/re_level" }
+re_puzzle    = { path = "engine/re_puzzle" }
+re_render    = { path = "engine/re_render" }
+re_present   = { path = "engine/re_present", default-features = false }
+re_audio     = { path = "engine/re_audio" }
+re_postfx    = { path = "engine/re_postfx" }
+re_glitch    = { path = "engine/re_glitch" }
+re_asciifx   = { path = "engine/re_asciifx" }
+re_runtime   = { path = "engine/re_runtime" }
+ts_net       = { path = "engine/ts_net" }
+
+ts_editor    = { path = "editor/ts_editor" }
+re_lvlcheck  = { path = "editor/re_lvlcheck" }
+re_voximport = { path = "editor/re_voximport" }
+re_voxscene  = { path = "editor/re_voxscene" }
+re_imgqa     = { path = "editor/re_imgqa" }
+re_golden    = { path = "editor/re_golden" }
+
+ts_netplay   = { path = "apps/ts_netplay" }
+
+# ─────────────────────── Static-analysis (SMART-DENY POLICY) ────────────────
+# Triage-driven policy (2026-06-24): ~3,897 warnings measured under full
+# pedantic+nursery; the cast_* family (2,070 hits) and suboptimal_flops (414)
+# are confirmed noise for a real-time raycaster codebase.  float_cmp is
+# high-value in lib code but 247/249 hits were test asserts (handled via
+# cfg_attr(test, allow(clippy::float_cmp)) at each crate root).
+#
+# re_present keeps a MANUAL [lints] block (can't inherit + override
+# unsafe_code simultaneously) — its clippy group entries mirror this table.
+[workspace.lints.rust]
+# re_present's manual block downgrades this to "warn" for its FFI unsafe sites
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# Base groups: all errors, pedantic/nursery advisory
+all      = { level = "deny",  priority = -1 }
+pedantic = { level = "warn",  priority = -1 }
+nursery  = { level = "warn",  priority = -1 }
+
+# ── High-value promotions (override the groups above) ──────────────────────
+# float_cmp: exact float equality is almost always a bug in lib code;
+# test-module hits are suppressed per-crate via cfg_attr(test, allow(...)).
+float_cmp        = "deny"
+# disallowed_types: catches terminal/audio types leaking into wrong crates.
+disallowed_types = "deny"
+
+# ── Confirmed-noise demotions (override pedantic/nursery) ──────────────────
+# cast_*: 2,070 hits — all benign index/length casts in the raycaster hot path.
+cast_possible_truncation = "allow"
+cast_sign_loss           = "allow"
+cast_possible_wrap       = "allow"
+cast_precision_loss      = "allow"
+# suboptimal_flops: 414 hits — fadd/fmul reordering; no accuracy impact in
+# the shading/synth math, and the compiler already vectorises these.
+suboptimal_flops         = "allow"
+
+# ─────────────────────────── DISK HYGIENE ───────────────────────────────────
+# Same rationale as the game workspace's copy of this block (root Cargo.toml):
+# `debug = "line-tables-only"` keeps file:line in backtraces without the bulk
+# of a full PDB; dependencies compile with no debug info at all.
+# See scripts/prune-target.ps1 (+ .sh) for the periodic sweep.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+# DEV / PLAYTEST builds (`cargo run --release`). NOT stripped — keep debug symbols
+# so a crash during playtest still gives a usable backtrace. Fast-ish compile.
+opt-level = 3
+lto = "thin"
+
+# NOTE: no [profile.dist] here — the shipment profile is a GAME concern (the
+# packaged `terminal-state` binary). It lives in that game's own Cargo.toml,
+# not in this engine workspace.

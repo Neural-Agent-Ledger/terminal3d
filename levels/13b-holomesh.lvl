@@ -1,0 +1,61 @@
+# terminal3d example level — levels/13b-holomesh.lvl
+#
+# HOLOGRAM MESH fixture — the "more complex shape" companion to 13-holocube.lvl.
+# Proves the hologram pass generalises beyond a box: the SAME transparent-
+# wireframe renderer draws an arbitrary voxel SHAPE (here a stepped PYRAMID and a
+# stepped SPHERE) from its silhouette. `shape = pyramid|sphere` fills a different
+# cell set inside the bounding box; the renderer derives the glowing contour from
+# whatever cells result, so any voxel mesh reads as a hologram.
+#
+# Layout: a 17x22x6 room. A PYRAMID hologram sits on the LEFT, a SPHERE on the
+# RIGHT, both floating ahead of the player who looks NORTH (-y) down the room.
+#
+# Prove it:
+#   cargo run -p re_imgqa -- levels/13b-holomesh.lvl
+
+[meta]
+name        = 13b-holomesh
+title       = The Mesh Projects
+
+[room]
+size        = 17 22 6
+ambient     = solid
+
+# A stepped PYRAMID hologram (tapers to an apex as z rises), left of centre.
+[holo pyramid]
+shape       = pyramid
+region      = (3,9,1)-(7,13,5)
+style       = 0
+
+# A stepped SPHERE / ellipsoid hologram, right of centre.
+[holo sphere]
+shape       = sphere
+region      = (9,9,1)-(13,13,5)
+style       = 0
+
+# Minimal solvable graph so the level loads as a real level.
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 14,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (14,2,2)
+
+[pedestal]
+center       = 14 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 16 11 1
+
+# Stand near the SOUTH wall, looking NORTH (-y) at both shapes.
+[player]
+spawn        = 8 19 1
+facing       = -y

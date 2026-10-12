@@ -1,0 +1,78 @@
+# terminal3d example level — levels/EM-splat.lvl
+#
+# PARTICLE-EMITTER SHOWCASE (accumulating, depth-aware sub-cell splat) — NOT a
+# campaign puzzle. A dense, narrow-cone burst placed
+# so many particles land in the SAME few screen cells at once from the
+# player's spawn. Previously `splat_particles_kinds` was last-write-wins: only
+# whichever particle happened to be processed last that frame ever drew. It
+# now ACCUMULATES every contributor per cell and resolves 2+ overlapping
+# particles to a density-ramp glyph (`.` -> `:` -> `*` -> `%` as the cluster
+# grows) over the averaged colour, instead of flickering between one
+# particle's look and another's. `emitter::tests::b6_overlapping_particles_
+# accumulate_into_a_density_glyph` pins the exact resolve rule; this level is
+# the visible, in-engine version of the same scenario.
+
+[meta]
+name        = EM-splat
+title       = Dense Splat (B6)
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ── DENSE CLOUD — a narrow, high-rate burst so many particles share cells ────
+[emitter dense_cloud]
+origin_world    = 5.0 2.0 1.2
+colors          = 0xFF4040 0xFF4040 0xFF4040
+color_mode      = Fixed
+family          = growth_dot
+bold            = Off
+direction       = 0.0 1.0 0.0
+spread_deg      = 3.0
+speed           = 0.05
+speed_spread    = 0.01
+burst           = 200
+lifetime        = 6.0
+lifetime_spread = 0.1
+max_particles   = 200
+seed            = 9701
+blend           = KeepBg

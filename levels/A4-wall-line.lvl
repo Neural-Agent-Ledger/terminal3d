@@ -1,0 +1,124 @@
+# terminal3d example level — levels/A4-wall-line.lvl
+#
+# Scalable Material Overlay · Phase P3 — "Line ON a wall surface" demo.
+#
+# THE PROOF (P3 follow-up to A2): an authored `[line]` whose world points lie flat ON a
+# WALL surface now SITS ON that wall — aligned with the wall slice the raycaster draws,
+# not floating off it. A2 proved floor / free-space strokes align; the documented P2
+# limitation was that a stroke on a vertical wall face missed by a sub-cell-to-cell
+# amount because `world_to_screen` projected EVERY point through the FLOOR vertical
+# model (z=0 plane a full eye-height below the horizon), while the cast draws a wall
+# slice CENTRED on the horizon. P3 makes `lines::project_on_surface` detect a point on a
+# wall (framebuffer cell `surface.is_wall()` at matching depth) and re-project it
+# through the cast's wall-slice vertical model — so the row matches the wall.
+#
+# Geometry: a 6x7 room with the camera CENTRED on the far wall. The camera spawns at
+# (1,3,1) facing +x, ~3.5 cells from the far +x perimeter wall (solid cells at grid x=5 →
+# interior face at world x=5.0). This raycaster draws a single horizontal SLAB of walls
+# anchored at the eye's z-cell (floor(1.5)=1), so the visible wall face spans world
+# z [1,2], centred on the horizon when standing. The line's z lives in that band:
+# z≈1.5 == the wall's vertical centre (horizon), z≈1.2 near the slice bottom, z≈1.8 near
+# the slice top. A BORDER rectangle (one polyline) frames the wall and a crossing
+# DIAGONAL cuts it — all laid FLAT on the wall. What proves the fix is that every stroke
+# cell SITS ON the wall rows (centred on the horizon), not floating a cell below it (the
+# P2 floor-model behaviour this P3 follow-up corrects); see the with-vs-without-lines
+# diff in the P3 notes — the only changed cells fall inside the far wall's row span.
+#
+# Mechanism (P3, DP2-B + DP5-C, wall-aware): after the cast + auto-contour,
+# `re_render::lines::apply` projects each endpoint with `project_on_surface`. `col` and
+# perpendicular `depth` are model-independent; the ROW uses the cast's wall-slice model
+# (`line_h = proj/perp`, centred at horizon + eye shear, `wall_v = cam_cell_z + 1 - z`)
+# when the framebuffer cell it lands in is a wall at the same depth, else the unchanged
+# floor model. Floor / free-space strokes (A2) are byte-identical. No scale rules.
+#
+# Not a shipped puzzle — a render-demo fixture (like A1 / A2 / A3). A trivial single ON
+# pipe keeps it structurally valid for lvlcheck. Render it with:
+#   cargo run -p re_imgqa -- levels/A4-wall-line.lvl
+
+[meta]
+name        = level-A4-wall-line
+title       = Line On A Wall
+
+[room]
+size        = 6 7 4
+ambient     = solid
+
+# Neutral wall so the bright authored strokes read against it.
+[material room_wall]
+fg          = #8A93A0
+bg          = #0B0E12
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.25
+surface     = wall_solid
+
+[material room_floor]
+fg          = #4C5A66
+bg          = #070B0E
+recipe      = grain scale=3.0 speck=0.10
+surface     = floor
+
+# The line ink material — a hot cyan stroke. A `[line]` binds it BY NAME; the post-pass
+# resolves the name → this material's palette colour for the stroke tint.
+[material line_ink]
+fg          = #38E0FF
+bg          = #04161B
+recipe      = grain scale=2.0 speck=0.05
+
+# ── THE AUTHORED LINES (Scalable Material Overlay §6 P2/P3) ──────────────────────
+# All strokes live ON the far +x wall plane (world x = 4.0). The visible wall slab spans
+# world z [1,2] (anchored at the eye's z-cell); centre z=1.5 maps to the horizon.
+#
+# A BORDER rectangle around the wall face — one closed polyline: top edge (z=1.8),
+# right edge (down), bottom edge (z=1.2), left edge (up), back to start. The frame must
+# hug the wall, top edge near the slice top and bottom edge near the slice bottom.
+[line wall_border]
+path        = 5,2.0,1.8; 5,5.0,1.8; 5,5.0,1.2; 5,2.0,1.2; 5,2.0,1.8
+material    = line_ink
+scale       = none
+
+# A crossing DIAGONAL on the same wall: top-left (low y, high z) → bottom-right (high y,
+# low z). It must sit flat on the wall, inside the border.
+[line wall_diag]
+path        = 5,2.0,1.8; 5,5.0,1.2
+material    = line_ink
+scale       = none
+
+# ── A trivial valid graph (structural validity for lvlcheck) ─────────────────────
+[node p]
+pos         = 1 1 1
+glyph       = P
+is_input    = yes
+
+[node q]
+pos         = 4 5 1
+glyph       = Q
+is_output   = yes
+threshold   = 1
+
+[pipe p->q]
+state       = ON
+path        = (1,1,1) (4,5,1)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit q=1]
+parts       = block
+
+[inputs]
+p           = 1
+
+[pedestal]
+center      = 4 5 1
+volume      = 1 1 1
+
+[door]
+pos         = 4 1 1
+target_parts = q
+
+[player]
+spawn       = 1 3 1
+facing      = +x

@@ -1,0 +1,39 @@
+[package]
+name = "ts_editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "terminal-state-editor"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+re_core = { workspace = true }
+re_world = { workspace = true }
+re_level = { workspace = true }
+re_render = { workspace = true }
+re_voximport = { workspace = true }
+re_present = { workspace = true, default-features = false, features = ["backend-terminal", "editor"] }
+# Sound-field authoring: the archetype
+# table + `combine` for the cursor readout/heat-map, and `Player` for the
+# opt-in Shift+U live audition. `re_audio` never touches the terminal and its
+# own device path is a documented no-op under `TS_AUDIO_SILENT`/no-device —
+# see `field.rs`'s module doc for the editor-side gating this crate adds on
+# top of that.
+re_audio = { workspace = true }
+glam = { workspace = true }
+
+[dependencies.re_lvlcheck]
+path = "../re_lvlcheck"
+
+# Test-only: encodes a real captured Framebuffer (from `chrome::draw_grid` /
+# `preview::render_preview`, the actual production painters) to PNG for visual
+# evidence — see `chrome::tests::field_evidence_frames_render_to_png`. Never
+# built into the shipped `terminal-state-editor` binary (dev-dependency only).
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }

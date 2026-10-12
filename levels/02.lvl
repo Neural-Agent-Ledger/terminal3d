@@ -1,0 +1,144 @@
+# terminal3d example level — levels/02.lvl
+#
+# L2 — three input nodes (R, G, neutral; sources 1, 1, 0) feed a threshold-2
+# hidden node (mix) that drives a threshold-1 output. The neutral pipe is a
+# decoy: its source is 0, so toggling it contributes nothing regardless.
+
+[meta]
+name        = level-02-two-make-three
+title       = Two Make Three
+version     = 1
+spec_rev    = 2026-06-15
+
+[room]
+size        = 14 10 4
+floor       = grid
+ceiling     = dim
+ambient     = trace-pattern
+
+# ── COLOR-FORWARD palette (preset-based, matches the readable look of L04/L08) ─
+# L2 colour concept: "Two Make Three" — warm additive composition (R + G = Y). The room
+# glows warm amber — the color the network learns to make — over orthogonal
+# surface hues so each surface reads its own kind. Built on catalog presets
+# (clean dual-channel palettes that keep near glyphs visible) re-skinned by fg/bg:
+#   walls   — warm amber gold panel (the additive-light shell, dominant identity)
+#   floor   — cool teal metal deck, opposite temperature → strong wall/floor seam
+#   ceiling — dark slate metal, darkest surface so "up" reads instantly
+[material mix_wall]
+preset      = gold
+fg          = #F2AE44
+bg          = #1C1206
+surface     = wall_solid
+
+[material mix_floor]
+preset      = metal
+fg          = #3FE08C
+bg          = #051410
+surface     = floor
+
+[material mix_ceiling]
+preset      = metal
+fg          = #2E3848
+bg          = #060810
+surface     = ceiling
+
+[palette]
+fog_color   = #120A04
+fog_near    = 3.0
+fog_far     = 18.0
+
+[node R]
+pos          = 2,2,2
+glyph        = R
+pool         = FIRE BLOOD ROSE FLAME DAWN BRICK CRIMSON RUBY EMBER GARNET
+pool_alt     = огонь кровь 火 紅 fuego rojo feu rouge Feuer Rot
+color        = #FF4040
+is_input     = yes
+
+[node G]
+pos          = 2,7,2
+glyph        = G
+pool         = LEAF MOSS GRASS FOREST MINT JADE FERN VINE SPRING CHLOROPHYLL
+pool_alt     = зелёный лес 緑 翠 verde vert grün Grün трава листва
+color        = #40FF40
+is_input     = yes
+
+[node neutral]
+pos          = 2,5,2
+glyph        = n
+pool         = STONE BONE ASH GRAVEL CONCRETE PLASTER LIMESTONE CHALK SLATE PUMICE
+pool_alt     = камень 石 灰 piedra pierre Stein серый gris gray grau
+color        = #909090
+is_input     = yes
+
+[node mix]
+pos          = 7,5,2
+glyph        = M
+pool         = ADD COMBINE FUSE BLEND COMPOSITE SUM JUNCTION CONFLUENCE
+pool_alt     = смесь 混合 mezcla mélange Mischung 合 統合
+color        = #FFD040
+threshold    = 2
+
+[node output]
+pos          = 12,5,2
+glyph        = O
+pool         = OUTPUT MODEL EMIT SHINE
+pool_alt     = выход モデル salida sortie Modell 出力
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+[pipe R->mix]
+state        = OFF
+path         = (2,2,2) (7,2,2) (7,5,2)
+switch_at    = (5,2,2)
+density      = 0.7
+
+[pipe G->mix]
+state        = OFF
+path         = (2,7,2) (7,7,2) (7,5,2)
+switch_at    = (5,7,2)
+density      = 0.7
+
+[pipe neutral->mix]
+state        = OFF
+path         = (2,5,2) (7,5,2)
+switch_at    = (5,5,2)
+density      = 0.6
+
+[pipe mix->output]
+state        = OFF
+path         = (7,5,2) (12,5,2)
+switch_at    = (10,5,2)
+density      = 0.7
+
+[part yellow_block]
+size         = 2 2 2
+mask         =
+##
+##
+
+##
+##
+color        = #FFD040
+offset       = 0 0 0
+
+[emit output=1]
+parts        = yellow_block
+
+[inputs]
+R            = 1
+G            = 1
+neutral      = 0
+
+[pedestal]
+center       = 7 5 1
+volume       = 2 2 2
+
+[door]
+pos          = 13 5 1
+target_parts = output
+
+[player]
+spawn        = 10 5 1
+facing       = -x

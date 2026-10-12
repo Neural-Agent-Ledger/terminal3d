@@ -1,0 +1,91 @@
+# terminal3d example level — levels/EM-attract.lvl
+#
+# PARTICLE-EMITTER SHOWCASE (attractor/orbit, optional Lorenz) — NOT a campaign
+# puzzle. Two emitters isolate the two orbit-family
+# motion kinds side by side:
+#   * orbit_glow  — `motion = attract` : pulled toward a fixed point with a
+#     tangential swirl term, so particles loop around the target instead of
+#     falling straight in.
+#   * lorenz_drift — `motion = lorenz` : the classic chaotic attractor
+#     (sigma=10, rho=28, beta=8/3); the particle's position IS the (scaled)
+#     attractor state — deterministic per seed, chaotic in shape.
+
+[meta]
+name        = EM-attract
+title       = Attractor & Lorenz
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ── ORBIT GLOW — motion = attract (W2) ────────────────────────────────────────
+[emitter orbit_glow]
+origin_world    = 3.5 5.0 1.0
+colors          = 0xFFF0C0 0xE0A030 0x704010
+color_mode      = RampOverAge
+family          = growth_dot
+bold            = ByAge
+motion          = attract 3.5 5.0 2.2 strength=3.2 swirl=1.4
+rate            = 10.0
+lifetime        = 4.5
+lifetime_spread = 0.4
+max_particles   = 128
+seed            = 9101
+blend           = KeepBg
+
+# ── LORENZ DRIFT — motion = lorenz (W2 optional) ──────────────────────────────
+# `scale` maps the attractor's natural ~[-20,20] range into world cells so the
+# butterfly-shaped path stays inside the room; vel/accel/direction/speed are
+# all ignored for this motion — position IS the (scaled) attractor state.
+[emitter lorenz_drift]
+origin_world    = 6.5 5.0 2.0
+colors          = 0xC0A0FF 0x7050C0 0x301860
+color_mode      = RampOverAge
+family          = haze_dot
+bold            = Off
+motion          = lorenz scale=0.10
+rate            = 6.0
+lifetime        = 6.0
+lifetime_spread = 0.5
+max_particles   = 96
+seed            = 9102
+blend           = KeepBg

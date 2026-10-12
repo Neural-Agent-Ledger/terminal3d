@@ -1,0 +1,116 @@
+# terminal3d example level — levels/92-fractal-portal.lvl
+#
+# Fractal / infinite-zoom DEMO fixture (NOT a shipped puzzle). Shows the
+# log-polar `Fractal` portal material on walls in two motion modes, so a
+# `--dump` (and the visual-critic) can see ringed / spiral portal walls that read
+# distinctly from a plain wall.
+#
+# Layout: a TALL, DEEP room. The player stands at the far SOUTH end (high y)
+# looking NORTH (-y), so the far (north) wall is straight ahead and far away —
+# the portal there fills a LARGE, roughly SQUARE area of the view (the fractal
+# needs a square-ish sampled region to show its arm/ring structure, not a
+# grazing few-row slice). That far wall is skinned with `portal_spiral` (a Droste
+# spin+zoom spiral). The WEST side wall is skinned with `portal_zoom` (concentric
+# rings rushing outward). The remaining perimeter is plain stone, so the portals
+# read against an ordinary wall.
+#
+#   cargo run -p re_imgqa -- levels/92-fractal-portal.lvl
+#
+# (Goldens sample at time 0, so the portals render a STATIC frame here — the
+# zoom/spin motion plays live in-game.)
+
+[meta]
+name        = 92-fractal-portal
+title       = Fractal Portal
+
+# A TALL (z=10) and DEEP (y=16) room. Height makes the portal walls render many
+# cells tall (rings/arms read vertically); depth pushes the spawn far from the
+# north wall so the spiral fills a big square region dead ahead instead of a
+# 2-row colour bar. x = west->east, y = north->south, z = floor->ceiling.
+[room]
+size        = 12 16 10
+ambient     = solid
+
+# ───────────────────────────── SURFACE MATERIALS ────────────────────────────
+# Three surface slots skinned via `preset = NAME` (a bare preset pulls the whole
+# catalog config — palette, animation, self-lit). The two portal presets are the
+# new fractal materials; stone is the plain wall they read against.
+
+# wall_solid (the ambient perimeter) -> plain STONE, the ordinary wall.
+[material hall_stone]
+preset      = stone
+surface     = wall_solid
+
+# wall_trace -> PORTAL_ZOOM: concentric rings rushing outward (infinite zoom).
+# Painted on the WEST wall (x=0) below.
+[material portal_rings]
+preset      = portal_zoom
+surface     = wall_trace
+
+# wall_matrix -> PORTAL_SPIRAL: a Droste spin+zoom spiral. Painted on the far
+# NORTH wall (y=0) the player faces, so the spiral is dead ahead.
+[material portal_swirl]
+preset      = portal_spiral
+surface     = wall_matrix
+
+# ───────────────────── WALL DECALS (paint surfaces onto walls) ──────────────
+# Re-stamp specific wall regions as a surface KIND so the bound material shows up
+# there. The NORTH wall becomes the spiral portal; the WEST wall the ring portal.
+# Both span the FULL height of the tall wall (z=1..8 = 8 vertical cells of
+# portal, well over the 2-row slice the old room produced) and the full width/
+# depth, so the fractal samples a large square-ish region.
+
+# NORTH wall (y=0) -> matrix surface == the SPIRAL portal, full width + height.
+[wall_decal portal_north]
+surface     = matrix
+region      = (1,0,1)-(10,0,8)
+
+# WEST wall (x=0) -> trace surface == the RING portal, full depth + height.
+[wall_decal portal_west]
+surface     = trace
+region      = (0,1,1)-(0,14,8)
+
+# ───────────────────────────── MINIMAL PUZZLE (sandbox) ─────────────────────
+# One input -> one output + a switch so the file is a real, loadable, nominally
+# solvable level (not just scenery). Tucked at the spawn end, out of the vista.
+[node source]
+pos          = 4,13,2
+glyph        = ◉
+is_input     = yes
+
+[node sink]
+pos          = 7,13,2
+glyph        = O
+is_output    = yes
+threshold    = 1
+
+[pipe source->sink]
+state        = OFF
+path         = (4,13,2) (7,13,2)
+switch_at    = (5,13,2)
+density      = 0.8
+
+[inputs]
+source       = 1
+
+[pedestal]
+center       = 7 13 1
+volume       = 1 1 1
+
+[door]
+pos          = 7 14 1
+target_parts = sink
+
+# Stand at the far SOUTH end looking NORTH (-y) down the long room: the spiral
+# portal fills the far north wall dead ahead (large + square), the ring portal
+# runs down the west wall to the left, plain stone elsewhere.
+[player]
+spawn        = 6 14 1
+facing       = -y
+
+# A faint cool fog so depth reads without washing out the portal hues. fog_far
+# reaches the north wall so the spiral stays visible at the far end.
+[palette]
+fog_color   = #06121C
+fog_near    = 5.0
+fog_far     = 22.0

@@ -1,0 +1,121 @@
+# terminal3d example level — levels/A2-lines.lvl
+#
+# Scalable Material Overlay · Phase P2 — "Lines" demo.
+#
+# THE PROOF: an authored `[line]` draws a CRISP DIAGONAL vector stroke across the
+# floor — a clean straight line, NOT a voxel stairstep — composited OVER the auto
+# contour by the P2 line post-pass (re_render::lines). A SECOND line runs from the
+# foreground toward the far wall and passes BEHIND a solid node pillar: the part of
+# the stroke behind the nearer pillar is OCCLUDED (depth-tested away), proving the
+# line respects scene depth.
+#
+# Mechanism (P2, DP2-B + DP5-C): `build_map` carries the authored polylines on the
+# map's overlay; after the cast + auto-contour, `re_render::lines::apply` projects
+# each segment's world endpoints through the SAME camera/projection the DDA uses
+# (world_to_screen), rasterizes a screen-space stroke with interpolated depth,
+# occlusion-tests each stroke point against the grid along its own view ray (the
+# first surface on any plane wins), and stamps an orientation box-
+# drawing glyph (╲/━/┃) tinted by the resolved line material. No scale rules (P3),
+# no insets (P4) — flat octave-0 crisp strokes only.
+#
+# Not a shipped puzzle — a render-demo fixture (like A1 / 94 / 95 / 97). A trivial
+# single ON pipe keeps it structurally valid for lvlcheck. Render it with:
+#   cargo run -p re_imgqa -- levels/A2-lines.lvl
+
+[meta]
+name        = level-A2-lines
+title       = Authored Lines
+
+[room]
+size        = 14 14 5
+ambient     = solid
+
+# Neutral surfaces so the bright authored strokes read clearly against them.
+[material room_wall]
+fg          = #8A93A0
+bg          = #0B0E12
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.25
+surface     = wall_solid
+
+[material room_floor]
+fg          = #4C5A66
+bg          = #070B0E
+recipe      = grain scale=3.0 speck=0.10
+surface     = floor
+
+# The line ink material — a hot cyan stroke. A `[line]` binds it BY NAME; the P2
+# post-pass resolves the name → this material's palette colour for the stroke tint.
+# (It is a normal authored material; only its colour is consumed for a line.)
+[material line_ink]
+fg          = #38E0FF
+bg          = #04161B
+recipe      = grain scale=2.0 speck=0.05
+
+# ── THE AUTHORED LINES (Scalable Material Overlay §6 P2) ─────────────────────
+# A crisp DIAGONAL stroke drawn in front of the scene geometry. It runs from the
+# upper-left (nearer-left, high z) down to the lower-right (a touch farther, low z).
+# World z: the room's walls span world [1, 4] and its ceiling slab [4, 5], so the
+# high end sits at 3.8, just under the ceiling (inside the slab it would be hidden):
+# world y increases (screen column → right) while world z decreases (screen row →
+# down), so it projects to a clean down-right screen diagonal of half-cell `╲`
+# glyphs — a straight line, NOT a voxel staircase. At depth x≈6-7 it sits in FRONT
+# of the far wall (depth ≈10), so it is fully visible. scale = none.
+[line crisp_diagonal]
+path        = 6,6.5,3.8; 6.6,9.5,1.2
+material    = line_ink
+scale       = none
+
+# Line z is WORLD z, the walls' own convention: cell z index k spans world [k, k+1]
+# (floor top = 1.0, standing eye = 1.5). Migrated +1.0 when the floor model stopped
+# reading z as floor-relative (set-dressing F4).
+# A lateral stroke on the floor (world z = 1.0) at depth x = 10, running y = 3 → 11. It
+# passes BEHIND the solid node pillar `P` at (8,7,1): the pillar is NEARER (x=8 <
+# x=10), so the depth test HIDES the part of this stroke directly behind the pillar
+# (around y=7) while the rest draws — the occlusion proof.
+[line occluded_run]
+path        = 10,3,1.0; 10,11,1.0
+material    = line_ink
+scale       = none
+
+# ── A solid occluder + a trivial valid graph ────────────────────────────────
+# `P` is a solid object cell (renders as WallOther) standing between the camera and
+# the far half of `occluded_run`, so it hides that half (the occlusion proof).
+[node p]
+pos         = 8 7 1
+glyph       = P
+is_input    = yes
+
+[node q]
+pos         = 12 11 2
+glyph       = Q
+is_output   = yes
+threshold   = 1
+
+[pipe p->q]
+state       = ON
+path        = (8,7,1) (12,11,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit q=1]
+parts       = block
+
+[inputs]
+p           = 1
+
+[pedestal]
+center      = 12 11 1
+volume      = 1 1 1
+
+[door]
+pos         = 13 11 1
+target_parts = q
+
+[player]
+spawn       = 2 7 1
+facing      = +x

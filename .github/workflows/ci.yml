@@ -1,0 +1,79 @@
+# CI for the terminal3d engine + editor repo.
+#
+# Layering (docs/LAYERING.md): `cargo xtask layers` is the automated version of
+# the engine/editor/apps direction table; `cargo test --workspace` also runs it
+# (xtask's own `#[test]`), so this job would still catch a violation even if the
+# explicit xtask step below were ever dropped by mistake — it is kept anyway
+# because its pass/fail line in the log is easier to spot than one test name
+# among hundreds.
+#
+# DCO: this repository is DCO-only, not CLA (see CONTRIBUTING.md "Sign-off
+# (DCO)" and the `DCO` file at the repo root). Enforcement is the GitHub DCO
+# App (https://github.com/apps/dco), installed on the repository rather than
+# run as a workflow job here — it comments on and blocks a pull request whose
+# commits lack `Signed-off-by`, needs no maintenance in this file, and does
+# not depend on a third-party Action of uneven quality. If the app is ever
+# uninstalled, the equivalent maintained Action is
+# `dcoapp/dco-check` (https://github.com/marketplace/actions/dco-check-app).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Incremental caches balloon `target/` for no benefit on a one-shot CI build
+  # that never rebuilds from the same cache twice.
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  test:
+    name: fmt, clippy, test, layers (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Linux audio/input headers
+        if: runner.os == 'Linux'
+        # kira (re_audio) needs ALSA; gilrs (re_present, gamepad input) needs
+        # udev. Both are compile-time link deps on Linux only — Windows uses
+        # the OS-native audio/input APIs and needs nothing extra here.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+
+      - name: Install Rust (stable, rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy (workspace lints deny errors; pedantic/nursery are advisory)
+        run: cargo clippy --workspace --all-targets
+
+      - name: cargo test --workspace
+        shell: bash
+        run: |
+          # Never touch a real save/settings profile, never open an audio
+          # device. A GitHub-hosted runner has no real profile to protect, but
+          # keeping the same two env vars here means a locally-run copy of
+          # this exact command behaves identically.
+          export TS_SAVE_DIR="$(mktemp -d)"
+          export TS_AUDIO_SILENT=1
+          cargo test --workspace --no-fail-fast
+
+      - name: cargo xtask layers
+        run: cargo xtask layers

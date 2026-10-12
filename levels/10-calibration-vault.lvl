@@ -1,0 +1,134 @@
+# terminal3d example level — levels/10-calibration-vault.lvl
+#
+# "The Calibration Vault" — a readability-first chamber.
+#
+# Built to score well under the render-QA linter (`re_imgqa`): the three
+# surfaces are skinned with deliberately separated palettes so object
+# boundaries read cleanly —
+#   walls   : warm amber brick   (structured vertical seams)
+#   floor   : cool steel grain   (distinct hue + lower luminance)
+#   ceiling : dark slate sky      (darkest — "up" reads instantly)
+# A wide fog band keeps near walls crisp while distance recedes, so the
+# depth→brightness cue is monotonic.
+#
+# Diegetic frame: a calibration room the dying system still keeps honest —
+# the one place where the picture is supposed to be legible.
+#
+# Puzzle (real, solvable): two inputs A,B feed a hidden node H (threshold 2);
+# H feeds the output O. Flip all three pipe switches → both inputs reach H →
+# H fires → O fires → solved. Minimal but genuinely winnable.
+#
+# Prove it:
+#   cargo run -p re_imgqa -- levels/10-calibration-vault.lvl
+#   cargo run -p re_imgqa --release -- levels/10-calibration-vault.lvl
+
+[meta]
+name        = 10-calibration-vault
+title       = The Calibration Vault
+version     = 1
+
+[room]
+size        = 14 12 5
+ambient     = solid
+
+# Warm amber brick on near-black brown — structured seams give clean vertical
+# edges and a moderate (not noisy) interior texture.
+[material vault_wall]
+fg          = #E89A40
+bg          = #160D07
+recipe      = brick aspect=2.0 mortar_w=0.18 grain=0.32
+surface     = wall_solid
+
+# Cool steel-blue grain floor — a different hue AND lower luminance than the
+# walls, so the wall/floor seam scores high boundary contrast.
+[material vault_floor]
+fg          = #79ABCE
+bg          = #0A1320
+recipe      = grain scale=3.0 speck=0.15
+surface     = floor
+
+# Dark slate sky ceiling — the darkest surface, so "up" reads at a glance and
+# the wall/ceiling seam pops.
+[material vault_ceiling]
+fg          = #3A4658
+bg          = #04060A
+recipe      = sky scale=6.0 density=0.06
+surface     = ceiling
+
+# Cool, deep fog. Near plane held back so brickwork stays crisp at arm's length;
+# far plane distant so the depth gradient is long and monotonic.
+[palette]
+fog_color   = #0A1018
+fog_near    = 3.0
+fog_far     = 18.0
+
+# ── Puzzle graph ────────────────────────────────────────────────────────────
+[node A]
+pos          = 2,3,2
+glyph        = A
+color        = #FF6040
+is_input     = yes
+
+[node B]
+pos          = 2,9,2
+glyph        = B
+color        = #40A0FF
+is_input     = yes
+
+[node H]
+pos          = 7,6,2
+glyph        = H
+color        = #C0C0C0
+threshold    = 2
+
+[node O]
+pos          = 12,6,2
+glyph        = O
+color        = #FFFFFF
+is_output    = yes
+threshold    = 1
+
+[pipe A->H]
+state        = OFF
+path         = (2,3,2) (7,3,2) (7,6,2)
+switch_at    = (5,3,2)
+density      = 0.7
+
+[pipe B->H]
+state        = OFF
+path         = (2,9,2) (7,9,2) (7,6,2)
+switch_at    = (5,9,2)
+density      = 0.7
+
+[pipe H->O]
+state        = OFF
+path         = (7,6,2) (12,6,2)
+switch_at    = (10,6,2)
+density      = 0.7
+
+[inputs]
+A            = 1
+B            = 1
+
+# On solve, a pale block rises on the pedestal as the tangible "output".
+[part beacon]
+size         = 1 1 2
+mask         =
+#
+
+#
+color        = #FFFFFF
+
+[emit O=1]
+parts        = beacon
+
+[pedestal]
+center       = 10 6 1
+volume       = 1 1 1
+
+[door]
+pos          = 13 6 1
+
+[player]
+spawn        = 11 6 1
+facing       = -x

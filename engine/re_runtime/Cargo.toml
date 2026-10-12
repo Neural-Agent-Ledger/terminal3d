@@ -1,0 +1,51 @@
+[package]
+name = "re_runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "re_runtime"
+path = "src/lib.rs"
+
+# `re_runtime` — the generic `.lvl` play-session systems, generic over the
+# host's `States`. It knows nothing about menus, saves, a campaign, or a
+# host's concrete state enum: every plugin that needs to know "is a level
+# live" is generic over `S: States` and receives the "live" state value from
+# the host (see `zoom` / `sound_fields`).
+
+[features]
+# Dev-only: Bevy Remote Protocol + reflect wiring, so a host's own `dev`
+# feature can forward here instead of re-wiring BRP itself. Off by default —
+# zero cost to the shipped build.
+dev = ["bevy/bevy_remote", "re_world/reflect", "re_core/reflect"]
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+re_core = { workspace = true }
+re_world = { workspace = true }
+re_level = { workspace = true }
+re_puzzle = { workspace = true }
+re_render = { workspace = true }
+re_audio = { workspace = true }
+# The present layer's backend-neutral message/resource types only
+# (`PostFxCycle`, `ZoomToggle`, …) — no terminal backend needed here.
+re_present = { workspace = true, default-features = false }
+re_asciifx = { workspace = true }
+
+# The App's reproducible, ECS-managed RNG resource (see `rng`'s module doc for
+# why this is reused rather than hand-rolled).
+bevy_rand = { workspace = true }
+bevy_prng = { workspace = true }
+
+[dev-dependencies]
+# rng tests call `next_u32()` through the `rand_core` trait; bevy_prng does not re-export it.
+rand_core = "0.10"
+# SHA-256 for `tests/staircase_integration.rs`: a terminal-independent hash of
+# the `{glyph, fg, bg}` Framebuffer grid, used to assert two camera poses
+# render DIFFERENT frames without pinning either to a golden byte string. Pure
+# Rust, no terminal dep. Same version `re_golden` carries.
+sha2 = "0.11"

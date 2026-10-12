@@ -1,0 +1,74 @@
+# terminal3d example level — levels/95-facet-demo.lvl
+#
+# Showcase fixture for the THREE new look levers in re_render (not a shipped
+# puzzle). Skins the room's surfaces with the demo catalog materials:
+#   * walls (wall_solid) = `relief_vol` — the ECONOMICAL MULTI-CHANNEL volume
+#     underline (fg/bg/coverage + a hue-preserving third underline cue per face).
+#   * panels (wall_trace) = `facet` — the ANGLE-DEPENDENT glyph (the hatch line
+#     rotates with the viewing angle; orbit it to see the glyph change).
+#   * screens (wall_matrix) = `pane` — the TRANSPARENCY-VIA-UNDERLINE glass marker
+#     (see-through cell, only a coloured underline rule).
+#   * floor = `metal`, ceiling = `void` (plain context).
+#
+# Dump it with (ANSI shows the fg/bg/underline channels):
+#   cargo run -p re_imgqa -- levels/95-facet-demo.lvl
+
+[meta]
+name        = level-95-facet-demo
+title       = Facet (angle-glyph) Demo
+
+[room]
+size        = 14 14 5
+ambient     = solid
+
+[material walls]
+preset      = facet
+surface     = wall_solid
+
+[material ground]
+preset      = metal
+surface     = floor
+
+[material roof]
+preset      = void
+surface     = ceiling
+
+[node a]
+pos         = 2 7 2
+glyph       = A
+is_input    = yes
+
+[node b]
+pos         = 11 7 2
+glyph       = B
+is_output   = yes
+threshold   = 1
+
+[pipe a->b]
+state       = ON
+path        = (2,7,2) (11,7,2)
+
+[part block]
+size        = 1 1 1
+mask        =
+#
+color       = #C0C0C0
+offset      = 0 0 0
+
+[emit b=1]
+parts       = block
+
+[inputs]
+a           = 1
+
+[pedestal]
+center      = 11 7 1
+volume      = 1 1 1
+
+[door]
+pos         = 13 7 1
+target_parts = b
+
+[player]
+spawn       = 6 7 1
+facing      = +x

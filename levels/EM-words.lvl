@@ -1,0 +1,72 @@
+# terminal3d example level — levels/EM-words.lvl
+#
+# PARTICLE-EMITTER SHOWCASE (word particles) — NOT a campaign puzzle.
+# `glyph_source = text "..."`: each spawned particle claims
+# the NEXT character of the authored string, cycling, instead of a family
+# glyph — the word visibly "breaks apart" over the emitter's lifetime as a
+# steady stream of particles carries it away.
+
+[meta]
+name        = EM-words
+title       = Word Particles
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ── WORD MOTES — glyph_source = text (W12) ────────────────────────────────────
+[emitter word_motes]
+origin_world    = 5.0 5.0 0.6
+colors          = 0x60FFB0 0x30A070 0x104030
+color_mode      = RampOverAge
+family          = growth_dot
+bold            = On
+glyph_source    = text "TERMINAL STATE"
+direction       = 0.0 0.0 1.0
+spread_deg      = 8.0
+speed           = 0.45
+rate            = 5.0
+lifetime        = 4.0
+lifetime_spread = 0.2
+max_particles   = 64
+seed            = 9601
+blend           = KeepBg

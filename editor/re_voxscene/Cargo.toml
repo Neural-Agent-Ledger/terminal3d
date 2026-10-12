@@ -1,0 +1,28 @@
+[package]
+name = "re_voxscene"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Engine-tooling crate: assembles MagicaVoxel .vox building models into one town
+# voxel scene, collision-checks the layout, builds a `re_world::Map`, and renders
+# it to ASCII with our own raycaster. NOT an engine crate — it may depend on the
+# engine crates (re_core/re_world/re_render) precisely because it is tooling.
+
+[lib]
+name = "re_voxscene"
+path = "src/lib.rs"
+
+[[bin]]
+name = "voxscene"
+path = "src/bin/voxscene.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+dot_vox.workspace = true
+glam.workspace = true
+re_core.workspace = true
+re_world.workspace = true
+re_render.workspace = true

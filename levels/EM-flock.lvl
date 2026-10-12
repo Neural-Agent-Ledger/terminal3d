@@ -1,0 +1,78 @@
+# terminal3d example level — levels/EM-flock.lvl
+#
+# PARTICLE-EMITTER SHOWCASE (flocking/fireflies) — NOT a campaign puzzle. One
+# emitter, `motion = flock`: Reynolds boids (separation +
+# alignment + cohesion) among the emitter's own live particles, capped at `n`.
+# Reads as a small swarm of fireflies drifting and wheeling together rather
+# than N independent particles. `seek_light` is authored at 0 here (no baked
+# light on this path — see docs/EMITTERS.md "Known gaps") so the swarm's
+# motion is pure flocking, not light-seeking, in this demo.
+
+[meta]
+name        = EM-flock
+title       = Firefly Flock
+
+[room]
+size        = 10 10 4
+ambient     = solid
+
+[material floor_grid]
+fg          = #2A8CC0
+bg          = #06121A
+glyph       = .
+recipe      = grain scale=2.0 speck=0.35 tile_eps=0.08
+surface     = floor
+
+[material wall_panel]
+fg          = #6E7A88
+bg          = #0A0E14
+glyph       = #
+recipe      = grain scale=1.5 speck=0.2 tile_eps=0.06
+surface     = wall_solid
+
+[node in_a]
+pos          = 2,2,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 7,2,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (2,2,2) (7,2,2)
+
+[pedestal]
+center       = 7 2 1
+volume       = 1 1 1
+
+[door]
+pos          = 9 5 1
+
+[player]
+spawn        = 5 8 1
+facing       = -y
+
+# ── FIREFLY FLOCK — motion = flock (W3) ───────────────────────────────────────
+# n=24 keeps the O(n^2) boid pass cheap (see docs/EMITTERS.md "Perf"); a wide
+# omni spread + burst seeds the whole swarm at once so cohesion has a scattered
+# starting cloud to visibly pull together.
+[emitter firefly_swarm]
+origin_world    = 5.0 5.0 1.5
+colors          = 0xFFF6A0 0xC0D840 0x304010
+color_mode      = RandomPick
+family          = anim_spin
+bold            = ByAge
+direction       = 0.0 0.0 1.0
+spread_deg      = 180.0
+speed           = 0.4
+speed_spread    = 0.3
+burst           = 24
+motion          = flock n=24 sep=0.5 align=0.3 coh=0.25 seek_light=0.0
+lifetime        = 12.0
+lifetime_spread = 0.0
+max_particles   = 24
+seed            = 9201
+blend           = KeepBg

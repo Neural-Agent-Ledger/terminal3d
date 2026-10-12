@@ -1,0 +1,43 @@
+[package]
+name = "ts_net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# ts_net is the shared networking contract for the multiplayer testbed.
+# It owns wire types (NetPlayer, Bullet), client→server events (MoveIntent,
+# FireInput), and the shared RepliconPlugins registration. It is a pure ECS
+# data + plugin crate — NO terminal, NO audio, NO rendering deps.
+#
+# NOTE: ts_net and ts_netplay are NEVER part of the `dist` profile artifact.
+# The shipped game is `-p re_game` only. The isolation is enforced by
+# re_game/tests/no_net_in_game_build.rs.
+
+[lints]
+workspace = true
+
+[dependencies]
+bevy = { workspace = true }
+# bevy_replicon 0.44.2 — targets Bevy 0.19; default-features=false skips the
+# `scene` feature (bevy/bevy_scene) which we don't need; we enable only
+# `client`+`server` so the lib compiles without any render/asset/winit pull-in.
+# Verified: bevy_replicon's own Cargo.toml has [dependencies.bevy] version="0.19",
+# default-features=false, features=["bevy_state"]. Headless-clean.
+# Re-verified 2026-09-28 — 0.44.2 still newest.
+# `re_core` was removed 2026-09-28 (dependency-refresh pass) — grep found
+# zero uses; the wire types (NetPlayer/Bullet) are built directly on
+# `re_world`/glam, never on re_core's Framebuffer/Cell contract.
+bevy_replicon = { workspace = true }
+re_world = { workspace = true }
+serde = { workspace = true }
+# glam's `serde` feature is REQUIRED so `Vec3` fields in the replicated wire
+# types (NetPlayer/Bullet) derive Serialize/Deserialize. Features are additive
+# across the workspace, so enabling it here turns it on for the single pinned
+# glam version without forking it.
+glam = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+# postcard is replicon's own default wire serializer (already in the tree via
+# bevy_replicon); used here only to round-trip the wire types in unit tests, so
+# the serde derives are exercised exactly as replication will exercise them.
+postcard = { version = "1", features = ["alloc"] }

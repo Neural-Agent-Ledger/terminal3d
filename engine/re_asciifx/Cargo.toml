@@ -1,0 +1,30 @@
+[package]
+name = "re_asciifx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "re_asciifx"
+path = "src/lib.rs"
+
+# `re_asciifx` — seeded 2D ASCII effects (eye, plasma, tunnel, radar, …) plus
+# the small text-painting helpers every screen uses. Originally lived under a
+# game crate's `ascii_fx`/`menu_fx`/`menu` modules and was extracted here so any
+# host can reuse the effects.
+#
+# Engine-pure: every effect is a deterministic, seed/time-driven function over
+# `re_core::Framebuffer`. No ECS, no game state, no Bevy dependency at all.
+
+[lints]
+workspace = true
+
+[dependencies]
+re_core = { workspace = true }
+
+[dev-dependencies]
+# `gallery` (#[cfg(test)]) checks every effect's glyphs against
+# `re_render::glyph_family::is_reliable` — a dev-only dependency, never in the
+# shipped build (§5.1: "Dev-deps: re_render (for glyph_family::is_reliable in
+# tests)").
+re_render = { workspace = true }

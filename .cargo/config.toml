@@ -1,0 +1,35 @@
+# Static CRT on Windows so a built .exe (ts_editor, ts_netplay, renderqa, ...)
+# needs no MSVC runtime install.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# Content-root anchor. Read at RUNTIME by `re_level::assets::content_roots()` via
+# `std::env::var` — never `env!`/`option_env!`, which would bake the value into the
+# binary at compile time and enter cargo's build fingerprint, causing spurious
+# rebuilds any time a workspace sharing this target dir with a sibling game
+# workspace touches its own env. `relative = true` makes cargo resolve "." against
+# the directory containing THIS file, i.e. `terminal3d/` — so every `cargo
+# run`/`cargo test` invoked from anywhere under this tree sees `terminal3d/` as its
+# content root regardless of the process's actual CWD.
+[env]
+TS_CONTENT_ROOT = { value = ".", relative = true }
+
+# Layering guard: `cargo xtask layers` runs the `xtask` bin against this
+# workspace's own resolved dependency graph, checking engine/editor/apps/xtask
+# direction plus terminal-backend isolation (see docs/LAYERING.md). The same
+# check runs as `#[test] fn layering_rules_hold()` under `cargo test --workspace`,
+# so this alias is a convenience, not the only way the rule is enforced.
+[alias]
+xtask = "run -p xtask --"
+
+# NOTE: no [build] target-dir here. Cargo merges `.cargo/config.toml` files from
+# the CWD upward regardless of workspace boundaries, so if this repo is checked
+# out as a sibling of a game workspace that sets `target-dir` in a parent config,
+# a `cargo` invocation inside `terminal3d/` picks up THIS file (crt-static +
+# TS_CONTENT_ROOT) and also that parent's target-dir, landing both workspaces'
+# artifacts in one shared `target/`. A standalone clone of this repo has no such
+# parent file, so it falls back to cargo's normal `terminal3d/target/` default —
+# correct there too, since there is no sibling workspace to share with.

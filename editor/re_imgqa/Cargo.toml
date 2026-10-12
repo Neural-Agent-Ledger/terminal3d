@@ -1,0 +1,27 @@
+[package]
+name = "re_imgqa"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "re_imgqa"
+path = "src/lib.rs"
+
+[[bin]]
+name = "renderqa"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+re_core.workspace = true
+re_world.workspace = true
+re_render.workspace = true
+re_level.workspace = true
+re_puzzle.workspace = true
+glam.workspace = true
+# Calls `re_runtime::notes`'s generic placard placement instead of
+# hand-mirroring the host game's private `level_text` resolver constants.
+re_runtime.workspace = true

@@ -1,0 +1,119 @@
+[package]
+name = "re_present"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The PRESENT layer: the ONLY terminal-touching crate. It exposes a `Present`
+# seam over `&Framebuffer` via bevy_ratatui (headless — no wgpu, no winit).
+
+# LINT POLICY for re_present — deliberately NOT inheriting workspace lints
+# wholesale because re_present is the one intended exception to
+# `unsafe_code = "forbid"` (it contains Win32/X11 FFI for OS cursor grab).
+#
+# Cargo does not support adding per-crate overrides when `lints.workspace = true`
+# is set; the only way to override is to spell out all lints manually.
+# All workspace lint groups are replicated below, with unsafe_code downgraded
+# to "warn" for measurement mode. A future hardening pass will resolve this by
+# either: (a) using targeted #[allow(unsafe_code)] at each FFI call site, or
+# (b) extracting Win32/X11 FFI into a thin `ts_osinput` unsafe-shim crate so
+# re_present itself no longer needs unsafe. Until then, unsafe_code = "warn"
+# allows the census to complete. DO NOT copy this pattern to any other crate.
+#
+# See: docs/LAYERING.md — re_present is the terminal layer.
+
+[lints.rust]
+# unsafe_code intentionally "warn" here (NOT "forbid") — see above.
+# All other engine/game crates inherit "forbid" from the workspace.
+unsafe_code = "warn"
+
+[lints.clippy]
+# Mirror the workspace smart-deny policy exactly.  re_present does NOT inherit
+# [workspace.lints] (because it overrides unsafe_code), so we must spell these
+# out here.  Keep in sync with [workspace.lints.clippy] in the root Cargo.toml.
+all      = { level = "deny",  priority = -1 }
+pedantic = { level = "warn",  priority = -1 }
+nursery  = { level = "warn",  priority = -1 }
+# High-value promotions
+float_cmp        = "deny"
+disallowed_types = "deny"
+# Confirmed-noise demotions (same rationale as workspace comment)
+cast_possible_truncation = "allow"
+cast_sign_loss           = "allow"
+cast_possible_wrap       = "allow"
+cast_precision_loss      = "allow"
+suboptimal_flops         = "allow"
+
+[features]
+default = ["backend-terminal"]
+
+# Editor input seam: emit backend-neutral EditorKey events for ts_editor.
+# Keeps bevy_ratatui confined to re_present. Off for the game build.
+editor = []
+
+# Terminal backend: bevy_ratatui drives raw-mode lifecycle, input and resize.
+# `bevy` is pulled with default-features = false (the workspace pin), so this
+# stays headless — no wgpu, no winit.
+backend-terminal = ["dep:bevy_ratatui", "dep:ratatui"]
+
+# X11 cursor grab (Linux). Enables `x11-dl` for runtime-dlopen XWarpPointer.
+# When NOT enabled, the Linux OS grab is a no-op (crossterm cell events used).
+# Off by default so headless / Wayland builds need no X11 headers.
+x11 = ["dep:x11-dl"]
+
+[dependencies]
+bevy = { workspace = true }
+re_core = { workspace = true }
+re_world = { workspace = true }
+
+# Cross-platform gamepad input (XInput/DInput on Windows, evdev on Linux, IOKit
+# on macOS). Works HEADLESS — talks to the OS input stack, no window needed.
+# Held as a NonSend resource because `Gilrs` is not `Send` on every platform.
+gilrs = "0.11"
+
+# --- backend-terminal deps (headless) ---
+# bevy_ratatui 0.12.0 (crates.io, 2026-09-11) is the first published release
+# built against bevy 0.19 (upstream ratatui/bevy_ratatui#98). Replaces the
+# interim git `rev` pin on upstream `main`. `ratatui` gives us Color/Buffer
+# for direct cell blits.
+bevy_ratatui = { version = "0.12", optional = true }
+# Match bevy_ratatui's ratatui (^0.30) so the Buffer/Color types unify.
+# default-features = false + an explicit feature list (dependency-refresh pass,
+# 2026-09-28): ratatui's default set drags in `all-widgets` (calendar widget,
+# unused) and `macros` (unused) which we never call, and — the one worth
+# recording — its OWN default set does NOT include termwiz/termion/terminfo,
+# so those were never load-bearing here; trimming to exactly what we use
+# (`crossterm` backend + `underline-color`, which `CellStyle::underline_color`
+# genuinely needs) is a pure hygiene cut, verified green (build + full test
+# suite unchanged).
+ratatui = { version = "0.30", optional = true, default-features = false, features = [
+    "crossterm",
+    "std",
+    "underline-color",
+] }
+
+# ─── Platform-specific OS cursor grab (real FPS mouse-look, no wgpu) ────────
+# Windows: Win32 GetCursorPos / SetCursorPos / GetConsoleWindow / ShowCursor.
+# `windows-sys 0.61.2` is already in the workspace lock (transitive dep of
+# async-executor etc.); we just need to declare we use it directly so cargo
+# selects the right feature set. Confined to `re_present` — no other crate uses
+# Windows APIs.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Linux / X11: optional `x11-dl` for runtime-dlopen-based XWarpPointer.
+# Behind the `x11` feature so the game builds cleanly on a headless Linux CI
+# that has no libX11 headers (Wayland-only session). Wayland gracefully degrades.
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+x11-dl = { version = "2", optional = true }
+
+[dev-dependencies]
+# Movement-feel tests construct `CameraPose { pos: Vec3, .. }` directly; `pos` is
+# re_world's glam (workspace 0.33), distinct from the glam bevy re-exports, so we
+# pin the SAME workspace glam here rather than going through `bevy::math::Vec3`.
+glam = { workspace = true }

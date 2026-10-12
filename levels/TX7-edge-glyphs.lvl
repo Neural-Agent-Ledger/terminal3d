@@ -1,0 +1,126 @@
+# terminal3d example level — levels/TX7-edge-glyphs.lvl
+#
+# THE EDGE-GLYPH FAMILY: ascii / contour / lines, side by side (render fixture,
+# NOT a shipped puzzle).
+#
+# WHY THIS EXISTS
+#   Until this file, NO level in the corpus used `subcell = ascii | contour | lines`.
+#   Three sampler modes, a whole precomputed DoG/Sobel edge field with its own mip
+#   pyramid, and not one frame anywhere that exercised them. That is how the two
+#   defects below survived: they were unreachable from the level corpus, so nothing
+#   a test or a `--dump` looked at could contradict them.
+#
+#   Both were the same misreading. Legacy per-cell tiling maps the whole texture
+#   across ONE WORLD CELL — `u` wraps once per world cell, `v` runs 0..1 over one wall
+#   slice — and two places read that as "the cell covers the whole image". True of the
+#   WORLD cell; false of the TERMINAL cell inside it.
+#     * `ascii_texels_per_cell` returned the full image dimension at every distance,
+#       so the mip choice was pinned to the COARSEST level. Every edge had been
+#       averaged out of the field before it was ever compared to the threshold. On
+#       this very plate that meant ZERO direction glyphs — the mode silently rendered
+#       as a plain luminance ramp. It now emits 245.
+#     * `ascii_edge_row_bias` probed a quarter of the whole IMAGE instead of a quarter
+#       of the CELL. Instrumented on a photo-textured wall, its upper probe read
+#       exactly 0.0 on all 83 calls.
+#
+#   Neither looked broken. A ramp-only wall is a legal render, and a bias that fires
+#   occasionally is what a conservative bias is supposed to look like. They were
+#   found by counting glyphs in a dumped frame, not by reading the code.
+#
+# WHAT EACH MODE IS FOR
+#   ascii   — luminance ramp fill, with a directional stroke (`- / | \ _`) wherever
+#             the field reports a strong edge. The `_` is the sub-cell variant: same
+#             horizontal orientation, but the response sits in the cell's LOWER half.
+#             It stays rare on purpose — a marginal bias makes a long straight
+#             boundary alternate `-`/`_` on field noise and read worse than no bias.
+#   contour — the same field behind a higher gate, so only the strongest responses
+#             ink: thinner, cleaner outlines.
+#   lines   — contour's strokes over a RECESSED fill (fg pulled toward bg), so the
+#             linework is nearly all you see.
+#
+# LAYOUT — three plates on one line, mirroring TX6 so the two fixtures compare:
+#   LEFT   pane  (wall_trace,  x 1..3 )  — subcell = ascii
+#   CENTRE gap   (wall_solid,  x 4..8 )  — subcell = contour
+#   RIGHT  pane  (wall_matrix, x 9..11)  — subcell = lines
+#
+# Dump it with:
+#   cargo run -p re_imgqa -- levels/TX7-edge-glyphs.lvl
+
+[meta]
+name        = TX7-edge-glyphs
+title       = Edge Glyphs — ascii / contour / lines
+
+[room]
+size        = 13 12 5
+ambient     = solid
+
+# The same GENERATED plate TX5 binds — committed source, no third-party art.
+# Regenerate with:
+#   cargo run -p re_voximport --bin gen_texfixture -- assets/texture/genplate_tex.png
+[texture genplate]
+file        = assets/texture/genplate_tex.png
+
+# ASCII mode. Rides wall_trace — the LEFT pane, x 1..3, z 1..3.
+[material img_ascii]
+recipe      = image
+texture     = genplate
+surface     = wall_trace
+fit         = stretch
+subcell     = ascii
+
+# CONTOUR mode. Rides wall_solid — the room's far wall, framed by the gap between
+# the two panes. Same baked field as `ascii`, higher ink gate.
+[material img_contour]
+recipe      = image
+texture     = genplate
+surface     = wall_solid
+fit         = stretch
+subcell     = contour
+
+# LINES mode. Rides wall_matrix, the RIGHT pane, x 9..11. Identical width and fit
+# to the other two, so the only difference on screen is the fill treatment.
+[material img_lines]
+recipe      = image
+texture     = genplate
+surface     = wall_matrix
+fit         = stretch
+subcell     = lines
+
+# LEFT pane (HALF): a one-cell-deep WallTrace slab at y=12.
+[wall_decal pane_ascii]
+surface     = trace
+region      = (1,8,1)-(3,8,3)
+
+# RIGHT pane (QUAD): a one-cell-deep WallMatrix slab at y=12, same size.
+[wall_decal pane_lines]
+surface     = matrix
+region      = (9,8,1)-(11,8,3)
+
+# Minimal puzzle scaffolding so the loader is satisfied (render fixture, not a puzzle).
+# Everything sits at y=1, BEHIND the spawn, so nothing occludes the three plates.
+[node in_a]
+pos          = 1,1,2
+glyph        = A
+is_input     = yes
+
+[node out]
+pos          = 11,1,2
+glyph        = O
+is_output    = yes
+
+[pipe in_a->out]
+state        = OFF
+path         = (1,1,2) (11,1,2)
+
+[pedestal]
+center       = 11 1 1
+volume       = 1 1 1
+
+[door]
+pos          = 12 5 1
+
+# Centred, three and a half cells back from the panes, facing +y — all three plates
+# in frame at a size where the sub-cell texel density is what your eye compares.
+[player]
+spawn        = 6 4 1
+facing       = +y

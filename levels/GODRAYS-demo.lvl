@@ -1,0 +1,176 @@
+# terminal3d example level — levels/GODRAYS-demo.lvl
+#
+# GOD-RAYS / LIGHT-SHAFT TECH-DEMO (NOT a campaign puzzle). A dim colonnade-style
+# hall whose only job is to show the COLOUR-ONLY god-rays emitter kind:
+# `kind = godrays`. Unlike a normal (Standard) emitter, a GodRays emitter draws NO
+# glyphs — its particles only TINT the cells they cover toward a warm yellow→white,
+# fading with age and down-beam distance via the `ColorMix` haze blend. So the
+# scene's wall / floor / ceiling GLYPHS stay intact; only their colour shifts warm
+# where a shaft crosses them.
+#
+# WHAT TO LOOK FOR (dump it and compare a shaft cell against a shadowed one):
+#   * Warm vertical/diagonal SHAFTS of light slanting across the hall.
+#   * Where a shaft hits the FAR WALL: the wall's `#` glyphs are KEPT, tinted gold.
+#   * Where a shaft crosses the FLOOR: the floor `.` grain is KEPT, tinted gold.
+#   * Where a shaft crosses OPEN AIR in front of the far wall: the backdrop tints
+#     warm too (the haze is volumetric — not depth-tested).
+#   * A shaft is BRIGHTEST near its source (the ceiling) and FADES toward the floor
+#     and into the distance.
+#
+# Two emitter KINDS coexist in this level on purpose, to prove the dedicated
+# god-rays layer composites independently of the normal glyph-splat layer:
+#   * `dust_motes`  — a STANDARD haze emitter (draws faint drifting glyphs).
+#   * `shaft_*`     — GOD-RAYS emitters (colour-only warm shafts, no glyphs).
+#
+# Verify (the `--ansi` dump emits the tinted cell colours as `38;2;r;g;b`):
+#   cargo run -p re_imgqa -- levels/GODRAYS-demo.lvl
+# A cell under a shaft keeps its non-space glyph but its fg/bg are warm (high R+G,
+# lower B) versus the same surface in shadow.
+
+[meta]
+name        = GODRAYS-demo
+title       = Light Shafts
+
+[room]
+size        = 12 14 5
+ambient     = solid
+
+# ── A DIM palette so the warm shafts read as added light ──────────────────────
+# Cool, low-key surfaces; the god-rays then paint warm gold ACROSS them.
+
+# Far wall + perimeter (#) — cool slate panels, deliberately dim.
+[material hall_wall]
+fg          = #4A5260
+bg          = #080B11
+glyph       = #
+recipe      = grain scale=1.5 speck=0.18 tile_eps=0.06
+surface     = wall_solid
+
+# Floor (.) — cool dark grid, dim so a shaft's warm tint on it is obvious.
+[material hall_floor]
+fg          = #2E3A48
+bg          = #05080C
+glyph       = .
+recipe      = grain scale=2.0 speck=0.30 tile_eps=0.08
+surface     = floor
+
+# Ceiling (^) — near-black void: the shafts appear to descend FROM it.
+[material hall_ceiling]
+fg          = #1A2028
+bg          = #030406
+glyph       = ^
+surface     = ceiling
+
+# ── Trivial network (keeps the level valid; not the point) ────────────────────
+
+[node src]
+pos          = 3,3,2
+glyph        = A
+is_input     = yes
+
+[node dst]
+pos          = 8,3,2
+glyph        = O
+is_output    = yes
+
+[pipe src->dst]
+state        = OFF
+path         = (3,3,2) (8,3,2)
+
+[pedestal]
+center       = 8 3 1
+volume       = 1 1 1
+
+[door]
+pos          = 11 7 1
+
+[player]
+spawn        = 6 12 1
+facing       = -y
+
+# ─────────────────────────────── EMITTERS ────────────────────────────────────
+
+# 0) STANDARD dust motes (draws GLYPHS) — a faint cool drifting haze so the level
+#    has visible particle glyphs to contrast with the colour-only shafts. Proves a
+#    Standard and a GodRays emitter coexist (different composite layers).
+[emitter dust_motes]
+kind            = standard
+origin_world    = 6.0 7.0 2.0
+colors          = 0x9FB8D8 0x4A7AA8 0x2A3A52
+color_mode      = RampOverAge
+family          = haze_dot
+bold            = Off
+direction       = 0.0 0.0 1.0
+spread_deg      = 70.0
+rate            = 10.0
+speed           = 0.25
+speed_spread    = 0.1
+path_jitter     = 0.4
+swirl           = 0.3
+lifetime        = 5.0
+lifetime_spread = 0.8
+accel           = 0.0 0.0 -0.005
+max_particles   = 192
+seed            = 1001
+blend           = KeepBg
+
+# 1) SHAFT — a broad warm cloud over the FAR-WALL / NORTH end of the hall (y≈2-3),
+#    drifting slowly down. kind = godrays ⇒ NO glyphs, only a warm ColorMix tint
+#    that fades with age + depth. It tints the far `#` wall and the floor below it
+#    GOLD while the wall/floor glyphs persist. Bright near-white → gold → amber.
+[emitter shaft_north]
+kind            = godrays
+origin_world    = 5.0 4.0 2.0
+colors          = 0xFFF6E0 0xFFD27A 0xC8841E
+color_mode      = RampOverAge
+direction       = 0.0 0.0 -1.0
+spread_deg      = 85.0
+rate            = 260.0
+speed           = 0.7
+speed_spread    = 0.3
+path_jitter     = 0.4
+lifetime        = 4.0
+lifetime_spread = 0.7
+accel           = 0.0 0.0 0.0
+max_particles   = 700
+seed            = 2001
+
+# 2) SHAFT — a second broad cloud over the MID hall (y≈6) and offset east, so a
+#    distinct warm region crosses a different part of the floor + the open air in
+#    front of the wall (the glow is volumetric — it tints the backdrop too).
+[emitter shaft_mid]
+kind            = godrays
+origin_world    = 8.0 7.0 2.0
+colors          = 0xFFF2D6 0xFFC766 0xB87014
+color_mode      = RampOverAge
+direction       = 0.0 0.0 -1.0
+spread_deg      = 85.0
+rate            = 240.0
+speed           = 0.7
+speed_spread    = 0.3
+path_jitter     = 0.4
+lifetime        = 4.0
+lifetime_spread = 0.6
+accel           = 0.0 0.0 0.0
+max_particles   = 640
+seed            = 2002
+
+# 3) SHAFT — a near warm cloud close to the spawn (y≈9) so the player sees the
+#    floor right in front of them tint gold (a strong near sample; depth fade keeps
+#    it bright here).
+[emitter shaft_near]
+kind            = godrays
+origin_world    = 6.0 9.5 2.0
+colors          = 0xFFFAF0 0xFFDD90 0xD08828
+color_mode      = RampOverAge
+direction       = 0.0 0.0 -1.0
+spread_deg      = 85.0
+rate            = 200.0
+speed           = 0.6
+speed_spread    = 0.3
+path_jitter     = 0.35
+lifetime        = 3.6
+lifetime_spread = 0.5
+accel           = 0.0 0.0 0.0
+max_particles   = 520
+seed            = 2003
