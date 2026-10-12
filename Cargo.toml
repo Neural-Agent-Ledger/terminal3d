@@ -3,7 +3,7 @@ resolver = "2"
 members = ["engine/*", "editor/*", "apps/*", "xtask"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 # Code is dual-licensed MIT OR Apache-2.0 at the user's option; every crate
 # inherits this via `license.workspace = true`. Example levels and generated

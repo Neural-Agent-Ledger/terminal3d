@@ -4901,7 +4901,7 @@ dependencies = [
 
 [[package]]
 name = "re_asciifx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "re_core",
  "re_render",
@@ -4909,7 +4909,7 @@ dependencies = [
 
 [[package]]
 name = "re_audio"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "kira",
@@ -4918,7 +4918,7 @@ dependencies = [
 
 [[package]]
 name = "re_core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "glam 0.33.11",
@@ -4926,7 +4926,7 @@ dependencies = [
 
 [[package]]
 name = "re_glitch"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "re_core",
@@ -4934,7 +4934,7 @@ dependencies = [
 
 [[package]]
 name = "re_golden"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "re_core",
  "re_level",
@@ -4945,7 +4945,7 @@ dependencies = [
 
 [[package]]
 name = "re_imgqa"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "glam 0.33.11",
  "re_core",
@@ -4958,7 +4958,7 @@ dependencies = [
 
 [[package]]
 name = "re_level"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dot_vox",
  "glam 0.33.11",
@@ -4969,7 +4969,7 @@ dependencies = [
 
 [[package]]
 name = "re_lvlcheck"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "re_core",
  "re_level",
@@ -4979,7 +4979,7 @@ dependencies = [
 
 [[package]]
 name = "re_postfx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "glam 0.33.11",
@@ -4988,7 +4988,7 @@ dependencies = [
 
 [[package]]
 name = "re_present"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "bevy_ratatui",
@@ -5003,7 +5003,7 @@ dependencies = [
 
 [[package]]
 name = "re_puzzle"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "re_level",
@@ -5011,10 +5011,11 @@ dependencies = [
 
 [[package]]
 name = "re_render"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "glam 0.33.11",
+ "libm",
  "noise",
  "re_core",
  "re_level",
@@ -5023,7 +5024,7 @@ dependencies = [
 
 [[package]]
 name = "re_runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "bevy_prng",
@@ -5042,7 +5043,7 @@ dependencies = [
 
 [[package]]
 name = "re_voximport"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dot_vox",
  "glam 0.33.11",
@@ -5056,7 +5057,7 @@ dependencies = [
 
 [[package]]
 name = "re_voxscene"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dot_vox",
  "glam 0.33.11",
@@ -5067,7 +5068,7 @@ dependencies = [
 
 [[package]]
 name = "re_world"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "glam 0.33.11",
@@ -6015,7 +6016,7 @@ dependencies = [
 
 [[package]]
 name = "ts_editor"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "glam 0.33.11",
@@ -6032,7 +6033,7 @@ dependencies = [
 
 [[package]]
 name = "ts_net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "bevy_replicon",
@@ -6044,7 +6045,7 @@ dependencies = [
 
 [[package]]
 name = "ts_netplay"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bevy",
  "bevy_replicon",
@@ -6888,7 +6889,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "camino",
  "cargo_metadata",

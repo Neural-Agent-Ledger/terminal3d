@@ -202,10 +202,10 @@ A game is its own cargo workspace that depends on the engine crates by git tag:
 
 ```toml
 [workspace.dependencies]
-re_core    = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.0" }
-re_render  = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.0" }
-re_present = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.0", default-features = false }
-re_runtime = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.0" }
+re_core    = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.1" }
+re_render  = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.1" }
+re_present = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.1", default-features = false }
+re_runtime = { git = "https://github.com/Neural-Agent-Ledger/terminal3d", tag = "v0.1.1" }
 # … one line per engine crate you use; editor crates only as dev-dependencies
 ```
 

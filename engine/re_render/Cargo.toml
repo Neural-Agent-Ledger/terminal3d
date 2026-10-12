@@ -10,6 +10,8 @@ workspace = true
 [dependencies]
 bevy = { workspace = true }
 glam = { workspace = true }
+# Platform-independent tan/atan for the view projection (see `view_params`).
+libm = "0.2"
 noise = "0.9"
 re_core = { workspace = true }
 re_world = { workspace = true }
