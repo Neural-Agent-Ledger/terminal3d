@@ -1934,15 +1934,19 @@ pub fn view_params(cols: usize, rows: usize, fov: &Fov) -> ViewParams {
 
     // FIXED vertical FOV: anchor the preset at the baseline aspect. Constant w.r.t.
     // window size — same vfov for 120×40, 200×20, 60×50, …
+    // `libm`, not std: std's f32 `tan`/`atan` call the platform C library, and
+    // glibc 2.39 rounds them one ulp differently from glibc 2.41 and the Windows
+    // CRT. That ulp reaches every ray and depth, so the golden hashes would differ
+    // by OS. `libm` gives the same bits everywhere.
     let h_preset = fov.h_preset_deg.to_radians();
-    let vfov = 2.0 * ((h_preset * 0.5).tan() / BASELINE_ASPECT).atan();
+    let vfov = 2.0 * libm::atanf(libm::tanf(h_preset * 0.5) / BASELINE_ASPECT);
 
     // Runtime horizontal FOV from THIS window's effective aspect, then clamp.
-    let hfov_raw = 2.0 * (eff_aspect * (vfov * 0.5).tan()).atan();
+    let hfov_raw = 2.0 * libm::atanf(eff_aspect * libm::tanf(vfov * 0.5));
     let hfov = hfov_raw.clamp(HFOV_MIN_DEG.to_radians(), HFOV_MAX_DEG.to_radians());
 
-    let plane_scale = (hfov * 0.5).tan();
-    let proj_plane_dist = (rows_f * 0.5) / (vfov * 0.5).tan();
+    let plane_scale = libm::tanf(hfov * 0.5);
+    let proj_plane_dist = (rows_f * 0.5) / libm::tanf(vfov * 0.5);
 
     // FACE SPAN: publish this view's horizontal projection scale — `cols/(2·plane_scale)`
     // screen columns per world unit at unit depth — for the cast that follows. Read deep
